@@ -1,6 +1,6 @@
 use indicatif::ProgressBar;
 use inquire::Confirm;
-use log::{debug, error, info, log};
+use log::{debug, error, info};
 use std::collections::HashMap;
 use std::time::Duration;
 use std::{

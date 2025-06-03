@@ -1,5 +1,3 @@
-use reqwest::Client;
-use serde_json::{Value, json};
 use std::{
     io::{self, Write},
     process,
@@ -8,8 +6,8 @@ use std::{
 use clap::ArgMatches;
 use log::{debug, info};
 
-use crate::storage::{
-    ClickupMember, ClickupPriority, ClickupSpace, ClickupStatus, save_clickup_config,
+use crate::utils::extract_clickup_spaces_data::{
+    extract_clickup_spaces_data, make_clickup_request,
 };
 
 pub async fn ticket(matches: ArgMatches<'static>, directory: &str) {
@@ -27,99 +25,77 @@ pub async fn ticket(matches: ArgMatches<'static>, directory: &str) {
     let client = reqwest::Client::new();
     match matches.subcommand() {
         ("spaces", Some(arg)) => {
-            info!("workspaces {:?}", arg);
+            debug!("Calling subcommnand workspaces {:?}", arg);
 
-            let mut url: String = "https://api.clickup.com/api/v2/team/".to_owned();
-            url.push_str(&matches.value_of("clickup_workspace_id").unwrap());
-            url.push_str("/space");
-
-            let mut authorization: String = "Bearer ".to_owned();
-            debug!("{:?}", matches.value_of("clickup_api_key").unwrap());
-            authorization.push_str(matches.value_of("clickup_api_key").unwrap());
-            debug!("authorization: {:?}", authorization);
-            let res = client
-                .get(url)
-                .header("Accept", "application/json")
-                .header(
-                    "Authorization",
-                    matches.value_of("clickup_api_key").unwrap(),
-                )
-                .body("")
-                .send()
+            let _ = extract_clickup_spaces_data(&directory, &matches, &client)
                 .await
                 .unwrap();
+        }
+        ("issue", Some(arg)) => {
+            info!("issue {:?}", arg);
 
-            let status = res.status();
-            info!("Status: {}", status);
-            let body: serde_json::Value = res.json().await.unwrap();
-            // let spaces: Vec<serde_json::Value> = serde_json::from_str(&body).unwrap();
-            debug!("body: {:#?}", body);
-            if body.get("spaces").is_none() {
-                writeln!(handle, "{}", "No spaces found in Clickup").unwrap_or_default();
+            let issue_id = arg.value_of("issue").unwrap_or("");
+            if issue_id.is_empty() {
+                writeln!(handle, "Issue ID is required").unwrap_or_default();
                 let _ = handle.flush();
+                process::exit(1);
             }
-            let spaces = body.get("spaces").unwrap();
-            let mut clickup_spaces = vec![];
-            for space in spaces.as_array().unwrap() {
-                info!("{:?}", space.get("id"));
-                info!("{:?}", space.get("name"));
-                let clickup_space = ClickupSpace {
-                    id: space.get("id").unwrap().to_string(),
-                    name: space.get("name").unwrap().to_string(),
-                };
-                clickup_spaces.push(clickup_space);
-            }
-            info!("clickup spaces {:?}", clickup_spaces);
 
-            let priorities = body.get("priorities").unwrap();
-            let mut clickup_priorities = vec![];
-            for priority in priorities.as_array().unwrap() {
-                debug!("{:?}", priority.get("id"));
-                debug!("{:?}", priority.get("priority"));
-                let clickup_priority = ClickupPriority {
-                    id: priority.get("id").unwrap().to_string(),
-                    priority: priority.get("priority").unwrap().to_string(),
-                };
-                clickup_priorities.push(clickup_priority);
-            }
-            info!("clickup priorities {:?}", clickup_priorities);
-            // statuses: id, status, type
-            let statuses = body.get("statuses").unwrap();
-            let mut clickup_statuses = vec![];
-            for status in statuses.as_array().unwrap() {
-                debug!("{:?}", status.get("id"));
-                debug!("{:?}", status.get("status"));
-                debug!("{:?}", status.get("type"));
-                let clickup_status = ClickupStatus {
-                    id: status.get("id").unwrap().to_string(),
-                    status: status.get("name").unwrap().to_string(),
-                    status_type: status.get("status").unwrap().to_string(),
-                };
-                clickup_statuses.push(clickup_status);
-            }
-            // memebers: id, initials, profilepicture, username
-            let members = body.get("members").unwrap();
-            let mut clickup_members = vec![];
-            for member in members.as_array().unwrap() {
-                info!("{:?}", member.get("id"));
-                info!("{:?}", member.get("initials"));
-                info!("{:?}", member.get("profilePicture"));
-                info!("{:?}", member.get("username"));
-                let clickup_member = ClickupMember {
-                    id: member.get("id").unwrap().to_string(),
-                    initials: member.get("initials").unwrap().to_string(),
-                    profile_picture: member.get("profilePicture").unwrap().to_string(),
-                    username: member.get("username").unwrap().to_string(),
-                };
-                clickup_members.push(clickup_member);
-            }
-            let _ = save_clickup_config(
-                &directory,
-                Some(clickup_spaces),
-                Some(clickup_members),
-                Some(clickup_statuses),
-                Some(clickup_priorities),
+            let url = format!(
+                "https://api.clickup.com/api/v2/task/{}?include_markdown_description=true",
+                issue_id
             );
+
+            let body = match make_clickup_request(
+                &client,
+                &url,
+                matches.value_of("clickup_api_key").unwrap(),
+            )
+            .await
+            {
+                Ok(b) => b,
+                Err(e) => {
+                    writeln!(handle, "Error fetching issue: {}", e).unwrap_or_default();
+                    let _ = handle.flush();
+                    process::exit(1);
+                }
+            };
+
+            // Extract and output the description
+            if let Some(description) = body.get("markdown_description") {
+                writeln!(handle, "Issue Description:").unwrap_or_default();
+                writeln!(
+                    handle,
+                    "{}",
+                    description.as_str().unwrap_or("No description available")
+                )
+                .unwrap_or_default();
+            } else if let Some(description) = body.get("description") {
+                writeln!(handle, "Issue Description:").unwrap_or_default();
+                writeln!(
+                    handle,
+                    "{}",
+                    description.as_str().unwrap_or("No description available")
+                )
+                .unwrap_or_default();
+            } else {
+                writeln!(handle, "No description found for this issue").unwrap_or_default();
+            }
+
+            // Also output other useful information
+            if let Some(name) = body.get("name") {
+                writeln!(handle, "\nIssue Name: {}", name.as_str().unwrap_or("N/A"))
+                    .unwrap_or_default();
+            }
+
+            if let Some(status) = body.get("status") {
+                if let Some(status_name) = status.get("status") {
+                    writeln!(handle, "Status: {}", status_name.as_str().unwrap_or("N/A"))
+                        .unwrap_or_default();
+                }
+            }
+
+            let _ = handle.flush();
         }
         _ => {}
     }

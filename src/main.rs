@@ -4,6 +4,7 @@ pub mod branch_utils;
 pub mod commit;
 pub mod path_utils;
 pub mod storage;
+pub mod utils;
 pub mod ux_utils;
 use clap::{App, Arg, SubCommand};
 use log::{debug, info};
@@ -46,7 +47,15 @@ async fn main() {
                         .env("CLICKUP_WORKSPACE_ID")
                         .required(true),
                 )
-                .subcommands(vec![SubCommand::with_name("spaces")]),
+                .subcommands(vec![
+                    SubCommand::with_name("spaces"),
+                    SubCommand::with_name("issue").arg(
+                        Arg::with_name("issue")
+                            .help("Get description from Clickup ticket so we can pipe it into another tool.")
+                            .required(true)
+                            .takes_value(true),
+                    ),
+                ]),
             SubCommand::with_name("commit")
                 .arg(
                     Arg::with_name("type")
@@ -124,9 +133,4 @@ async fn main() {
         )
         .await;
     }
-    // match matches.subcommand() {
-    //     ("commit", Some(_)) => commit::commit(matches, &git_branch, &directory),
-    //     ("ticket", Some(_)) => ticket::ticket(matches.subcommand_matches("ticket").unwrap()),
-    //     _ => {}
-    // }
 }

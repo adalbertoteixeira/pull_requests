@@ -10,22 +10,22 @@ use std::{
 use log::info;
 use serde::{Deserialize, Serialize};
 
-use crate::{branch_utils, prompts, ux_utils};
+use crate::{prompts, ux_utils};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct ClickupYamlConfig {
     clickup_spaces: Option<Vec<ClickupSpace>>,
     created_at: String,
     updated_at: Option<String>,
-    clickup_members: Option<Vec<ClickupMember>>,
-    clickup_statuses: Option<Vec<ClickupStatus>>,
-    clickup_priorities: Option<Vec<ClickupPriority>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ClickupSpace {
     pub id: String,
     pub name: String,
+    pub priorities: Option<Vec<ClickupPriority>>,
+    pub members: Option<Vec<ClickupMember>>,
+    pub statuses: Option<Vec<ClickupStatus>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -43,9 +43,8 @@ pub struct ClickupStatus {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ClickupMember {
-    pub id: String,
+    pub id: i64,
     pub username: String,
-    pub profile_picture: String,
     pub initials: String,
 }
 
@@ -278,9 +277,6 @@ pub fn save_branch_config(
 pub fn save_clickup_config(
     directory: &str,
     clickup_spaces: Option<Vec<ClickupSpace>>,
-    clickup_members: Option<Vec<ClickupMember>>,
-    clickup_statuses: Option<Vec<ClickupStatus>>,
-    clickup_priorities: Option<Vec<ClickupPriority>>,
 ) -> Result<(), io::Error> {
     info!(
         "Saving clickup spaces for clickup: {:?} in {}",
@@ -307,26 +303,11 @@ pub fn save_clickup_config(
             clickup_spaces: None, // clickup_name: git_clickup.to_string(),
             created_at: local_time_string.clone(),
             updated_at: None,
-            clickup_members: None,
-            clickup_statuses: None,
-            clickup_priorities: None,
         };
     };
 
     if clickup_spaces.is_some() {
         yaml_config.clickup_spaces = Some(clickup_spaces.unwrap());
-    }
-
-    if clickup_members.is_some() {
-        yaml_config.clickup_members = Some(clickup_members.unwrap());
-    }
-
-    if clickup_statuses.is_some() {
-        yaml_config.clickup_statuses = Some(clickup_statuses.unwrap());
-    }
-
-    if clickup_priorities.is_some() {
-        yaml_config.clickup_priorities = Some(clickup_priorities.unwrap());
     }
 
     yaml_config.updated_at = Some(local_time_string);
