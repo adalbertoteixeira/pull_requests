@@ -1,0 +1,5 @@
+/target
+.DS_Store
+Session.vim
+.commit_message
+deploy.sh

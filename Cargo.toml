@@ -1,0 +1,22 @@
+[package]
+name = "pull_requests"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = "2.34.0"
+log = "0.4"
+env_logger = "0.8.4"
+regex = "0.2"
+serde_json = "1.0"
+lazy_static = "1.5.0"
+inquire = { version = "0.7.5", features = ['editor'] }
+serde = { version = "1.0", features = ["derive"] }
+serde_yml = "0.0.12"
+chrono = "0.4.41"
+indicatif = "0.17.11"
+homedir = "0.3.4"
+reqwest = {version = "0.12.19" , features = ["json"]}
+tokio = { version = "1.45.1" , features = ["full"]}

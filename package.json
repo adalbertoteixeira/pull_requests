@@ -1,0 +1,47 @@
+{
+  "name": "@pull-requests/cli",
+  "version": "0.1.0",
+  "description": "Git pull request automation tool for JavaScript repositories",
+  "main": "index.js",
+  "bin": {
+    "pull-requests": "./bin/pull-requests.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js",
+    "build": "node scripts/build.js"
+  },
+  "keywords": [
+    "git",
+    "commit",
+    "message",
+    "automation",
+    "cli",
+    "developer-tools"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adalbertoteixeira/pull_requests.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "files": [
+    "bin/",
+    "scripts/",
+    "README.md",
+    "LICENSE",
+    "index.js"
+  ]
+}

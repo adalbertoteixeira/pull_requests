@@ -1,0 +1,25 @@
+# Rust source files
+src/
+Cargo.toml
+Cargo.lock
+
+# Build artifacts
+target/
+binaries/
+
+# Git files
+.git/
+.gitignore
+
+# Development files
+.commit_message/
+static_files/
+
+# Documentation source
+*.md
+!README.md
+
+# Config files
+.github/
+.vscode/
+.idea/
