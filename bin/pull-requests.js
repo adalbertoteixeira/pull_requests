@@ -8,7 +8,7 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const binaryName = 'commit_message' + (process.platform === 'win32' ? '.exe' : '');
+const binaryName = 'pull_requests' + (process.platform === 'win32' ? '.exe' : '');
 const binaryPath = path.join(__dirname, binaryName);
 
 // Pass all arguments to the binary
@@ -21,11 +21,11 @@ const child = spawn(binaryPath, args, {
 
 child.on('error', (err) => {
   if (err.code === 'ENOENT') {
-    console.error('commit_message binary not found!');
+    console.error('pull_requests binary not found!');
     console.error('Please try reinstalling the package:');
     console.error('  npm install @commit-message/cli');
   } else {
-    console.error('Failed to start commit_message:', err.message);
+    console.error('Failed to start pull_requests:', err.message);
   }
   process.exit(1);
 });

@@ -14,20 +14,20 @@ jobs:
         include:
           - os: macos-latest
             target: x86_64-apple-darwin
-            binary_name: commit_message
-            asset_name: commit_message-darwin-x64
+            binary_name: pull_requests
+            asset_name: pull_requests-darwin-x64
           - os: macos-latest
             target: aarch64-apple-darwin
-            binary_name: commit_message
-            asset_name: commit_message-darwin-arm64
+            binary_name: pull_requests
+            asset_name: pull_requests-darwin-arm64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            binary_name: commit_message
-            asset_name: commit_message-linux-x64
+            binary_name: pull_requests
+            asset_name: pull_requests-linux-x64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            binary_name: commit_message.exe
-            asset_name: commit_message-win32-x64.exe
+            binary_name: pull_requests.exe
+            asset_name: pull_requests-win32-x64.exe
 
     steps:
       - uses: actions/checkout@v3
@@ -82,7 +82,7 @@ jobs:
 
       - name: Upload Release Assets
         run: |
-          for asset in commit_message-*; do
+          for asset in pull_requests-*; do
             if [ -d "$asset" ]; then
               # It's a directory from download-artifact
               cd "$asset"
