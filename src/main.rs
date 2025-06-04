@@ -9,7 +9,6 @@ pub mod ux_utils;
 
 use clap::{App, Arg, SubCommand};
 use log::{debug, info};
-use prompts::pr_template_prompt;
 pub mod prompts;
 extern crate log;
 

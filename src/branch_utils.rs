@@ -266,15 +266,97 @@ pub fn push_pr(directory: &str) -> Option<i32> {
         .output()
         .expect("Failed to run  process");
 
-    let cmd_arg_status_code = output.status.code();
-    if cmd_arg_status_code.is_none() || cmd_arg_status_code.is_some_and(|x| x != 0) {
-        print!("OUTPUT: {:?}", cmd_arg_status_code);
-        print!("OUTPUT: {:?}", output);
-        let stderr = str::from_utf8(&output.stderr).unwrap();
-        print!("OUTPUT: {:?}", stderr);
-    }
     bar.finish();
-    io::stderr().write_all(&output.stderr).unwrap();
-    io::stdout().write_all(&output.stdout).unwrap();
+
+    let cmd_arg_status_code = output.status.code();
+
+    // Check if the command failed
+    if cmd_arg_status_code.is_none() || cmd_arg_status_code.is_some_and(|x| x != 0) {
+        let stderr = str::from_utf8(&output.stderr).unwrap();
+
+        // Check if the error is about missing upstream branch
+        if stderr.contains("has no upstream branch")
+            && stderr.contains("set the remote as upstream")
+        {
+            writeln!(handle, "\n{}", "The current branch has no upstream branch.")
+                .unwrap_or_default();
+            writeln!(handle, "{}", stderr).unwrap_or_default();
+            let _ = handle.flush();
+
+            let set_upstream_prompt = Confirm::new(
+                "Do you want to push and set the current branch as upstream on origin?",
+            )
+            .with_default(true)
+            .prompt();
+
+            match set_upstream_prompt {
+                Ok(response) => {
+                    let bar = ProgressBar::new_spinner();
+                    bar.enable_steady_tick(Duration::from_millis(100));
+                    if response {
+                        // Get current branch name
+                        let branch_cmd = format!("cd {} && git branch --show-current", directory);
+                        let branch_output = Command::new("sh")
+                            .arg("-c")
+                            .arg(branch_cmd)
+                            .output()
+                            .expect("Failed to get current branch");
+
+                        if branch_output.status.success() {
+                            let current_branch =
+                                str::from_utf8(&branch_output.stdout).unwrap().trim();
+
+                            // Push with --set-upstream
+                            let upstream_cmd = format!(
+                                "cd {} && git push --set-upstream origin {}",
+                                directory, current_branch
+                            );
+                            info!("Executing command: {}", upstream_cmd);
+
+                            writeln!(handle, "{}", "Setting upstream and pushing...")
+                                .unwrap_or_default();
+                            let _ = handle.flush();
+
+                            let upstream_output = Command::new("sh")
+                                .arg("-c")
+                                .arg(upstream_cmd)
+                                .output()
+                                .expect("Failed to run upstream push");
+
+                            bar.finish();
+                            io::stderr().write_all(&upstream_output.stderr).unwrap();
+                            io::stdout().write_all(&upstream_output.stdout).unwrap();
+
+                            return upstream_output.status.code();
+                        } else {
+                            writeln!(handle, "{}", "Failed to get current branch name")
+                                .unwrap_or_default();
+                            let _ = handle.flush();
+                        }
+                    } else {
+                        writeln!(handle, "{}", "Push cancelled by user.").unwrap_or_default();
+                        let _ = handle.flush();
+                    }
+                }
+                Err(_) => {
+                    writeln!(handle, "{}", "Failed to get user input. Push cancelled.")
+                        .unwrap_or_default();
+                    let _ = handle.flush();
+                }
+            }
+        } else {
+            // Other error, show the original output
+            print!("OUTPUT: {:?}", cmd_arg_status_code);
+            print!("OUTPUT: {:?}", output);
+            print!("OUTPUT: {:?}", stderr);
+            io::stderr().write_all(&output.stderr).unwrap();
+            io::stdout().write_all(&output.stdout).unwrap();
+        }
+    } else {
+        // Success case - show output normally
+        io::stderr().write_all(&output.stderr).unwrap();
+        io::stdout().write_all(&output.stdout).unwrap();
+    }
+
     cmd_arg_status_code
 }

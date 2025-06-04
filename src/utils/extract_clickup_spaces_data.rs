@@ -4,7 +4,6 @@ use crate::storage::{
 use clap::ArgMatches;
 use log::{debug, info};
 use reqwest::Client;
-use serde_json::Value;
 use std::{
     io::{self, Write},
     process,

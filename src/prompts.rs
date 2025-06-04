@@ -429,7 +429,6 @@ pub fn pr_template_prompt(issue_id: &str, use_claude: bool, directory: &str) -> 
     }
 
     if pr_risk_factor_description_string.is_some() {
-        pr_template += &"Because...";
         pr_template += &"\n";
         pr_template += &pr_risk_factor_description_string.unwrap();
         pr_template += &"\n";
