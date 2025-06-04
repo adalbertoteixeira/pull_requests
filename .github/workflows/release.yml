@@ -103,6 +103,25 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+      
+      - name: Prepare binaries for npm package
+        run: |
+          mkdir -p binaries
+          # Move all downloaded binaries to binaries directory
+          for asset in pull_requests-*; do
+            if [ -d "$asset" ]; then
+              cd "$asset"
+              for file in *; do
+                echo "Moving $file to binaries/"
+                cp "$file" ../binaries/
+              done
+              cd ..
+            fi
+          done
+          ls -la binaries/
+      
       - uses: actions/setup-node@v3
         with:
           node-version: '18'

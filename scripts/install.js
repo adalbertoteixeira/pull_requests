@@ -2,162 +2,94 @@
 
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import https from 'https';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const BINARY_NAME = 'pull_requests';
-const REPO_OWNER = 'adalbertoteixeira'; // Update this to your GitHub username
-const REPO_NAME = 'pull_requests'; // Update based on the new repository name
 
 function getBinaryName() {
   const platform = process.platform;
   const arch = process.arch;
   
-  const binaryName = `${BINARY_NAME}-${platform}-${arch}${platform === 'win32' ? '.exe' : ''}`;
+  // Map platform names to match our binary naming convention
+  let platformName = platform;
+  if (platform === 'win32') {
+    platformName = 'win32';
+  } else if (platform === 'darwin') {
+    platformName = 'darwin';
+  } else if (platform === 'linux') {
+    platformName = 'linux';
+  }
+  
+  // Map architecture names to match our binary naming convention
+  let archName = arch;
+  if (arch === 'x64') {
+    archName = 'x64';
+  } else if (arch === 'arm64') {
+    archName = 'arm64';
+  }
+  
+  const binaryName = `${BINARY_NAME}-${platformName}-${archName}${platform === 'win32' ? '.exe' : ''}`;
   return binaryName;
 }
 
-function downloadFile(url, destPath) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
-    
-    https.get(url, (response) => {
-      if (response.statusCode === 302 || response.statusCode === 301) {
-        // Follow redirect
-        https.get(response.headers.location, (redirectResponse) => {
-          redirectResponse.pipe(file);
-          file.on('finish', () => {
-            file.close();
-            resolve();
-          });
-        }).on('error', reject);
-      } else if (response.statusCode === 200) {
-        response.pipe(file);
-        file.on('finish', () => {
-          file.close();
-          resolve();
-        });
-      } else {
-        reject(new Error(`Failed to download: ${response.statusCode}`));
-      }
-    }).on('error', reject);
-  });
-}
-
-async function getLatestRelease() {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'api.github.com',
-      path: `/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`,
-      headers: {
-        'User-Agent': 'pull-requests-cli'
-      }
-    };
-
-    https.get(options, (res) => {
-      let data = '';
-      
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-      
-      res.on('end', () => {
-        try {
-          const release = JSON.parse(data);
-          resolve(release);
-        } catch (error) {
-          reject(error);
-        }
-      });
-    }).on('error', reject);
-  });
-}
-
-async function downloadBinary() {
+function installLocalBinary() {
   const binaryName = getBinaryName();
+  console.log(`Installing ${binaryName} from local binaries...`);
   
-  console.log(`Downloading ${binaryName} from GitHub releases...`);
+  // Path to the bundled binary
+  const sourcePath = path.join(__dirname, '..', 'binaries', binaryName);
+  
+  // Check if the binary exists
+  if (!fs.existsSync(sourcePath)) {
+    console.error(`Binary not found for platform: ${process.platform}-${process.arch}`);
+    console.error(`Expected binary: ${binaryName}`);
+    console.error(`Looked in: ${sourcePath}`);
+    console.error('Available binaries:');
+    
+    const binariesDir = path.join(__dirname, '..', 'binaries');
+    if (fs.existsSync(binariesDir)) {
+      const availableBinaries = fs.readdirSync(binariesDir);
+      availableBinaries.forEach(binary => console.error(`  - ${binary}`));
+    } else {
+      console.error('  No binaries directory found');
+    }
+    
+    process.exit(1);
+  }
+  
+  // Create bin directory
+  const binDir = path.join(__dirname, '..', 'bin');
+  if (!fs.existsSync(binDir)) {
+    fs.mkdirSync(binDir, { recursive: true });
+  }
+  
+  const targetPath = path.join(binDir, BINARY_NAME + (process.platform === 'win32' ? '.exe' : ''));
   
   try {
-    const release = await getLatestRelease();
-    const asset = release.assets.find(a => a.name === binaryName);
+    // Copy the binary to the bin directory
+    fs.copyFileSync(sourcePath, targetPath);
     
-    if (!asset) {
-      throw new Error(`Binary not found for platform: ${process.platform}-${process.arch}`);
-    }
-    
-    // Create bin directory
-    const binDir = path.join(__dirname, '..', 'bin');
-    if (!fs.existsSync(binDir)) {
-      fs.mkdirSync(binDir, { recursive: true });
-    }
-    
-    const targetPath = path.join(binDir, BINARY_NAME + (process.platform === 'win32' ? '.exe' : ''));
-    
-    // Download the binary
-    await downloadFile(asset.browser_download_url, targetPath);
-    
-    // Make it executable
+    // Make it executable on Unix systems
     if (process.platform !== 'win32') {
       fs.chmodSync(targetPath, 0o755);
     }
     
-    console.log(`✓ Successfully installed ${BINARY_NAME} v${release.tag_name}`);
+    console.log(`✓ Successfully installed ${BINARY_NAME}`);
+    console.log(`Binary location: ${targetPath}`);
   } catch (error) {
-    console.error('Failed to download binary:', error.message);
-    console.error('\nFalling back to building from source...');
-    await buildFromSource();
-  }
-}
-
-async function buildFromSource() {
-  // Check if we're in development (Cargo.toml exists)
-  const cargoTomlPath = path.join(__dirname, '..', 'Cargo.toml');
-  if (!fs.existsSync(cargoTomlPath)) {
-    console.error('Cannot build from source: Cargo.toml not found');
-    console.error('Please install Rust and build manually:');
-    console.error('1. Install Rust: https://www.rust-lang.org/tools/install');
-    console.error('2. Clone the repository');
-    console.error('3. Run: cargo build --release');
-    process.exit(1);
-  }
-  
-  console.log('Building from source...');
-  try {
-    execSync('cargo build --release', {
-      stdio: 'inherit',
-      cwd: path.join(__dirname, '..')
-    });
-    
-    // Create bin directory
-    const binDir = path.join(__dirname, '..', 'bin');
-    if (!fs.existsSync(binDir)) {
-      fs.mkdirSync(binDir, { recursive: true });
-    }
-    
-    // Copy the built binary
-    const releaseBinary = path.join(__dirname, '..', 'target', 'release', BINARY_NAME);
-    const targetPath = path.join(binDir, BINARY_NAME + (process.platform === 'win32' ? '.exe' : ''));
-    
-    if (fs.existsSync(releaseBinary)) {
-      fs.copyFileSync(releaseBinary, targetPath);
-      fs.chmodSync(targetPath, 0o755);
-      console.log(`✓ Built and installed ${BINARY_NAME} from source`);
-    }
-  } catch (error) {
-    console.error('Failed to build from source:', error.message);
-    console.error('Please ensure Rust is installed: https://www.rust-lang.org/tools/install');
+    console.error('Failed to install binary:', error.message);
     process.exit(1);
   }
 }
 
 // Main installation
-downloadBinary().catch((error) => {
-  console.error('Installation failed:', error);
+try {
+  installLocalBinary();
+} catch (error) {
+  console.error('Installation failed:', error.message);
   process.exit(1);
-});
+}
