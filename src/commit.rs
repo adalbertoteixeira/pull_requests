@@ -12,7 +12,7 @@ use std::{
     str,
 };
 
-pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str, cowboy_mode: &bool) {
+pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str) {
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
     // Show the PR template only
@@ -21,6 +21,7 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str, cowboy_mod
         process::exit(0);
     }
 
+    let cowboy_mode = matches.is_present("cowboy_mode");
     // Push the branch to origin only
     if matches.is_present("push_branch") {
         branch_utils::push_pr(directory);
@@ -101,7 +102,7 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str, cowboy_mod
         writeln!(handle, "{}", proposed_ouput_message).unwrap_or_default();
         let _ = handle.flush();
 
-        if cowboy_mode == &true {
+        if cowboy_mode == true {
             commit_message = proposed_output_string;
             will_accept_suggested_message = true;
         } else {
@@ -197,7 +198,7 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str, cowboy_mod
     }
 
     let mut build_pr_template = false;
-    if cowboy_mode == &true {
+    if cowboy_mode == true {
         build_pr_template = true;
     } else {
         let pr_template_prompt = Confirm::new(&confirm_message)
@@ -233,41 +234,5 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str, cowboy_mod
             &git_branch,
             pr_template,
         );
-        // let commit_pr_exit_code = branch_utils::commit_pr(
-        //     directory,
-        //     &commit_message,
-        //     additional_commit_message.clone(),
-        //     &git_branch,
-        //     &pr_template,
-        // );
-
-        // info!("Will commit pr exit code");
-        // let commit_fail_message =
-        //     "\n\x1b[1;31mCommit failed. Please fix the issue before commiting.\x1b[1;0m\n\n"
-        //         .to_owned();
-        // if commit_pr_exit_code.is_err() {
-        //     debug!("Commit PR exit code is err");
-        //     writeln!(handle, "{}", &commit_fail_message).unwrap_or_default();
-        //     let _ = handle.flush();
-        //     process::exit(1);
-        // }
-
-        // debug!("commit_pr_exit_code {:?}", commit_pr_exit_code);
-        // debug!("EXIT CODE 2 {:?}", &commit_pr_exit_code);
-        // debug!(
-        //     "commit_pr_exit_code: {:?}, {:?}, {:?}",
-        //     commit_pr_exit_code,
-        //     commit_pr_exit_code, //.is_none(),
-        //     commit_pr_exit_code, //.is_some_and(|x| x != 0)
-        // );
-        // let commit_pr_exit_code_result = &commit_pr_exit_code.unwrap();
-        // debug!("commit_pr_exit_code {:?}", commit_pr_exit_code_result);
-        // if commit_pr_exit_code_result.is_none()
-        //     || commit_pr_exit_code_result.is_some_and(|x| x != 0)
-        // {
-        //     writeln!(handle, "{}", commit_fail_message).unwrap_or_default();
-        //     let _ = handle.flush();
-        //     process::exit(1);
-        // }
     }
 }

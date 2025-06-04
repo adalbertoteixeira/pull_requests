@@ -1,8 +1,13 @@
 # Pull Requests
 
-Tool to automate the creation of PRs for JavaScript repositories.
+Tool to automate the creation of PRs for JavaScript repositories, using Clickup as the issue manager
+and Claude as the AI assistant.
+
+This tool is currently tied heavily to my specific use case. Improvements to accommodate other use
+cases aren't currently in the Roadmap, but might be considered if tests start being added.
 
 ## Highlights
+- Loads Clickup issues as the basis for the prompt piped into Claude.
 - When a pre-commit hook fails, the next run automatically suggests the previously entered commit
 message;
 - Helps build a Github PR template and automatically check tasks.
@@ -17,19 +22,20 @@ message;
 
 Install globally:
 ```bash
-npm install -g @pull-requests/cli
+npm install -g @adalbertosteixeira/pull-requests-cli@latest
 ```
 
 Or install as a dev dependency in your project:
 ```bash
-npm install --save-dev @pull-requests/cli
+npm install --save-dev  @adalbertosteixeira/pull-requests-cli@latest
 ```
 
 Then add a script to your `package.json`:
 ```json
 {
   "scripts": {
-    "commit": "pull-requests"
+    "commit": "npx @adalbertosteixeira/pull-requests-cli commit",
+    "issue": "npx @adalbertosteixeira/pull-requests-cli ticket issue ******",
   }
 }
 ```
@@ -56,23 +62,53 @@ npm run build
 
 Add `.pull_requests` to your `.gitignore`.
 
+> [!TIP]
+> If installing through download or local build, add the resulting binary to the path: `export PATH="$PATH:/User/folder/"`.
+
+### Add Clickup keys
+```
+export CLICKUP_API_KEY= ********************************************
+export CLICKUP_WORKSPACE_ID=**********
+```
+
+
+### Install Claude Code
+See documentation at [anthropic](https://www.anthropic.com/claude-code).
+
 
 ## Usage
 
-![demo](static_files/first.gif)
-
-After the binary and the install command is set up, just run just run `[yarn | npm run | ...] commit`;
-
-You can also trigger the tool manually using `./scripts/pull_requests`.
-
-You can use flags in the command. The most useful one is the custom commit message (`-m "..."`). 
-
-If you are committing several PRs to the same branch then type, prefix and id shouldn't change or will be
-extracted automatically, but the commit message will probably be different every time.
-
-
-The first time the tool is run an editor setup prompt will appear. For now only terminal based
+> [!TIP]
+> The first time the tool is run an editor setup prompt will appear. For now only terminal based
 `$EDITOR`s are mentioned, plus how to install VSCode usage.
+
+> [!NOTE]
+> For clarity and ease of use we're using the npm command, but running the binary directly will be faster.
+
+### Getting issue from Clickup and piping it to Claude
+This command will load the description from the Clickup issue and run Claude Code in the background:
+```
+npx @adalbertosteixeira/pull-requests-cli ticket issue ********* | claude -p "Given the following issue description, implement all the changes required to the codebase."
+```
+
+To enter a REPL session:
+
+```
+npx @adalbertosteixeira/pull-requests-cli ticket issue ********* | claude  "Given the following issue description, implement all the changes required to the codebase."
+```
+
+> [!NOTE]
+> Running one-off queries always chaining additional commands. For example, having Claude implement
+> the changes then chaining it the commit automation (in the future, once all the features are
+> implemented).
+
+### git commit helper
+![demo](static_files/first.gif)
+```
+npx @adalbertosteixeira/pull-requests-cli commit
+```
+
+
 
 
 ### Get help
@@ -95,4 +131,6 @@ yarn commit -h
 etc).
 - [ ] allow using a config file at the repository level;
 - [ ] automate adding`.pull_requests` to the `.gitignore` file;
-- [ ] allow reuse of existing PR template (changing fields if necessary).
+- [ ] allow reuse of existing PR template (changing fields if necessary);
+- [ ] create pull request from the branch if it doesn't exist yet;
+- [ ] automate version bumping and tagging.

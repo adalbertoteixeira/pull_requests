@@ -34,12 +34,6 @@ async fn main() {
                 .env("COMMIT_TOOL_CONFIG_DIRECTORY")
                 .takes_value(true),
         )
-        .arg(
-            Arg::with_name("cowboy_mode")
-                .long("cowboy-mode")
-                .help("Auto accept most prompts, except potentially destructive ones.")
-                .takes_value(false),
-        )
         .subcommands(vec![
             SubCommand::with_name("ticket")
                 .arg(
@@ -120,7 +114,13 @@ async fn main() {
                         .value_name("push-branch")
                         .help("Push the branch to the origin")
                         .takes_value(false),
-                ),
+                )
+        .arg(
+            Arg::with_name("cowboy_mode")
+                .long("cowboy-mode")
+                .help("Auto accept most prompts, except potentially destructive ones.")
+                .takes_value(false),
+        )
         ])
         .get_matches();
 
@@ -135,14 +135,12 @@ async fn main() {
     info!("Base directory is {:?}", directory);
     path_utils::top_level(&directory.to_owned());
 
-    let cowboy_mode = matches.is_present("cowboy_mode");
     let git_branch = path_utils::git_branch(&directory);
     if let Some(_) = matches.subcommand_matches("commit") {
         commit::commit(
             matches.subcommand_matches("commit").unwrap().clone(),
             &git_branch,
             &directory,
-            &cowboy_mode,
         );
     }
 

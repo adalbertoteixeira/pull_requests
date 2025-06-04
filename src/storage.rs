@@ -274,6 +274,36 @@ pub fn save_branch_config(
     Ok(())
 }
 
+pub fn load_clickup_config(directory: &str) -> Result<Option<Vec<ClickupSpace>>, io::Error> {
+    let path = Path::new(directory).join(".commit_message");
+    let file_path = Path::new(&path).join("clickup.yaml");
+    
+    if !file_path.exists() {
+        info!("No clickup config file found at: {:?}", file_path);
+        return Ok(None);
+    }
+    
+    match fs::File::open(&file_path) {
+        Ok(file) => {
+            let reader = io::BufReader::new(file);
+            match serde_yml::from_reader::<_, ClickupYamlConfig>(reader) {
+                Ok(file_read) => {
+                    info!("Successfully loaded clickup config: {:?}", file_read);
+                    Ok(file_read.clickup_spaces)
+                }
+                Err(e) => {
+                    info!("Failed to parse clickup YAML: {}", e);
+                    Err(io::Error::new(io::ErrorKind::InvalidData, e))
+                }
+            }
+        }
+        Err(e) => {
+            info!("Failed to open clickup config file: {}", e);
+            Err(e)
+        }
+    }
+}
+
 pub fn save_clickup_config(
     directory: &str,
     clickup_spaces: Option<Vec<ClickupSpace>>,
