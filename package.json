@@ -1,15 +1,7 @@
 {
-  "name": "@pull-requests/cli",
-  "version": "0.1.0",
+  "name": "@adalbertosteixeira/pull-requests-cli",
+  "version": "0.1.5",
   "description": "Git pull request automation tool for JavaScript repositories",
-  "main": "index.js",
-  "bin": {
-    "pull-requests": "./bin/pull-requests.js"
-  },
-  "scripts": {
-    "postinstall": "node scripts/install.js",
-    "build": "node scripts/build.js"
-  },
   "keywords": [
     "git",
     "commit",
@@ -18,13 +10,32 @@
     "cli",
     "developer-tools"
   ],
-  "author": "",
-  "license": "MIT",
+  "homepage": "https://github.com/adalbertoteixeira/pull_requests#readme",
+  "bugs": {
+    "url": "https://github.com/adalbertoteixeira/pull_requests/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/adalbertoteixeira/pull_requests.git"
+    "url": "git+https://github.com/adalbertoteixeira/pull_requests.git"
   },
+  "license": "MIT",
+  "author": "Adalberto Teixeira",
   "type": "module",
+  "main": "index.js",
+  "bin": {
+    "pull-requests": "bin/pull-requests.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "README.md",
+    "LICENSE",
+    "index.js"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install.js",
+    "build": "node scripts/build.js"
+  },
   "engines": {
     "node": ">=14.0.0"
   },
@@ -36,12 +47,5 @@
   "cpu": [
     "x64",
     "arm64"
-  ],
-  "files": [
-    "bin/",
-    "scripts/",
-    "README.md",
-    "LICENSE",
-    "index.js"
   ]
 }
