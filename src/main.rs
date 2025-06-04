@@ -6,8 +6,10 @@ pub mod path_utils;
 pub mod storage;
 pub mod utils;
 pub mod ux_utils;
+
 use clap::{App, Arg, SubCommand};
 use log::{debug, info};
+use prompts::pr_template_prompt;
 pub mod prompts;
 extern crate log;
 
@@ -33,6 +35,12 @@ async fn main() {
                 .env("COMMIT_TOOL_CONFIG_DIRECTORY")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("cowboy_mode")
+                .long("cowboy-mode")
+                .help("Auto accept most prompts, except potentially destructive ones.")
+                .takes_value(false),
+        )
         .subcommands(vec![
             SubCommand::with_name("ticket")
                 .arg(
@@ -57,6 +65,13 @@ async fn main() {
                     ),
                 ]),
             SubCommand::with_name("commit")
+                .arg(
+                    Arg::with_name("claude")
+                        .long("claude")
+                        .takes_value(false)
+                        .help("Pass this flag if you want to use Claude Code to help on the commit construction"), // .possible_values(&possible_types_slice)
+                                             // .default_value(&possible_types_slice[0]),
+                )
                 .arg(
                     Arg::with_name("type")
                         .short("t")
@@ -121,9 +136,15 @@ async fn main() {
     info!("Base directory is {:?}", directory);
     path_utils::top_level(&directory.to_owned());
 
+    let cowboy_mode = matches.is_present("cowboy_mode");
     let git_branch = path_utils::git_branch(&directory);
     if let Some(_) = matches.subcommand_matches("commit") {
-        commit::commit(matches.clone(), &git_branch, &directory);
+        commit::commit(
+            matches.subcommand_matches("commit").unwrap().clone(),
+            &git_branch,
+            &directory,
+            &cowboy_mode,
+        );
     }
 
     if let Some(_) = matches.subcommand_matches("ticket") {

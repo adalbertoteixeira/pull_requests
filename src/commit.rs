@@ -4,6 +4,7 @@ use crate::storage;
 use crate::ux_utils;
 use clap::ArgMatches;
 use inquire::Confirm;
+use log::debug;
 use log::{error, info, warn};
 use std::{
     io::{self, Write},
@@ -11,10 +12,10 @@ use std::{
     str,
 };
 
-pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str) {
+pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str, cowboy_mode: &bool) {
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
-                                                  // Show the PR template only
+    // Show the PR template only
     if matches.is_present("show_pr_template") {
         storage::load_commit_template(&git_branch, &directory);
         process::exit(0);
@@ -99,19 +100,25 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str) {
         proposed_ouput_message.push_str("\n");
         writeln!(handle, "{}", proposed_ouput_message).unwrap_or_default();
         let _ = handle.flush();
-        let confimation_prompt = Confirm::new("Do you want to accept the proposed message?")
-            .with_default(true)
-            .prompt();
 
-        will_accept_suggested_message = match confimation_prompt {
-            Ok(selection) => {
-                commit_message = proposed_output_string;
-                selection
-            }
+        if cowboy_mode == &true {
+            commit_message = proposed_output_string;
+            will_accept_suggested_message = true;
+        } else {
+            let confimation_prompt = Confirm::new("Do you want to accept the proposed message?")
+                .with_default(true)
+                .prompt();
 
-            Err(_) => {
-                print!("Did not understand your input.");
-                process::exit(1);
+            will_accept_suggested_message = match confimation_prompt {
+                Ok(selection) => {
+                    commit_message = proposed_output_string;
+                    selection
+                }
+
+                Err(_) => {
+                    print!("Did not understand your input.");
+                    process::exit(1);
+                }
             }
         }
     }
@@ -181,23 +188,39 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str) {
         let _ = handle.flush();
     }
 
+    let use_claude = matches.is_present("claude");
+    debug!("USE CLAUDE {}, {:?}", use_claude, matches);
     let mut pr_template = None;
-    let pr_template_prompt = Confirm::new("Do you want to build a PR template?")
-        .with_default(is_new_branch)
-        .prompt();
+    let mut confirm_message = "Do you want to build a PR template?".to_owned();
+    if use_claude {
+        confirm_message.push_str("We will use Claude Code to build it");
+    }
 
-    match pr_template_prompt {
-        Ok(selection) => {
-            if selection {
-                pr_template = Some(prompts::pr_template_prompt(&issue_id));
+    let mut build_pr_template = false;
+    if cowboy_mode == &true {
+        build_pr_template = true;
+    } else {
+        let pr_template_prompt = Confirm::new(&confirm_message)
+            .with_default(is_new_branch)
+            .prompt();
+        match pr_template_prompt {
+            Ok(selection) => {
+                if selection {
+                    build_pr_template = true
+                }
             }
-        }
-        Err(_) => {
-            print!("Did not understand your input.");
-            process::exit(1);
+            Err(_) => {
+                print!("Did not understand your input.");
+                process::exit(1);
+            }
         }
     }
 
+    if build_pr_template {
+        pr_template = Some(prompts::pr_template_prompt(
+            &issue_id, use_claude, &directory,
+        ));
+    }
     info!("Will ask for commit");
     let will_commit_pr = prompts::commit_pr_prompt();
 

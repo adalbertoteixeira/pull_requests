@@ -1,11 +1,13 @@
+use indicatif::ProgressBar;
 use std::{
     collections::HashMap,
     io::{self, Write},
     process::{self, Command},
+    time::Duration,
 };
 
 use crate::branch_utils;
-use inquire::{formatter::OptionFormatter, validator::Validation, Confirm, Editor, Select, Text};
+use inquire::{Confirm, Editor, Select, Text, formatter::OptionFormatter, validator::Validation};
 use log::info;
 
 pub fn editor_prompt() {
@@ -61,7 +63,7 @@ pub fn editor_prompt() {
         };
 
         if answer == false {
-            let suggestion_text= "Please configure your editor to use multi-line text. You can do this by following the instructions above and rerun the tool afterwards.";
+            let suggestion_text = "Please configure your editor to use multi-line text. You can do this by following the instructions above and rerun the tool afterwards.";
             writeln!(handle, "{}", suggestion_text).unwrap_or_default();
             let _ = handle.flush();
             process::exit(0);
@@ -241,27 +243,17 @@ pub fn push_pr_prompt() -> bool {
     return answer;
 }
 
-pub fn pr_template_prompt(issue_id: &str) -> String {
+pub fn pr_template_prompt(issue_id: &str, use_claude: bool, directory: &str) -> String {
+    let stdout = io::stdout(); // get the global stdout entity
+    let mut handle = io::BufWriter::new(&stdout);
+
     let mut pr_template = "".to_owned();
     let mut has_description = false;
 
-    let pr_description_prompt =
-        Editor::new("Write a description for your PR and explain why it's important").prompt();
-    let pr_description: Option<String> = match pr_description_prompt {
-        Ok(x) => Some(x),
-        Err(_) => None,
-    };
-    if pr_description.is_some() {
-        pr_template += &"\n";
-        pr_template += &pr_description.unwrap();
-        pr_template += &"\n";
-        has_description = true;
-    } else {
-        pr_template += &"Because..."
-    }
-
-    let risk_options: Vec<&str> = vec!["High", "Medium", "Low", "Trivial"];
-    let risk_factor_prompt = Select::new("Select risk factor", risk_options).prompt();
+    let mut pr_description_string: Option<String> = None;
+    let mut pr_risk_factor_string: Option<String> = None;
+    let mut pr_risk_factor_description_string: Option<String> = None;
+    let mut pr_test_steps: Option<String> = None;
 
     let risk_factor_map = HashMap::from([
         ("High", "🚨HIGH🚨"),
@@ -269,35 +261,177 @@ pub fn pr_template_prompt(issue_id: &str) -> String {
         ("Low", "👍LOW👍"),
         ("Trivial", "✅TRIVIAL✅"),
     ]);
-    let selected_risk_factor = match risk_factor_prompt {
-        Ok(risk_factor) => {
-            if risk_factor_map.contains_key(&risk_factor) {
-                Some(risk_factor_map.get(&risk_factor).unwrap().to_string())
-            } else {
-                None
+    match use_claude {
+        true => {
+            writeln!(
+                handle,
+                "{}",
+                "Asking Claude for help. This will take some time."
+            )
+            .unwrap_or_default();
+            let _ = handle.flush();
+            let bar = ProgressBar::new_spinner();
+            bar.enable_steady_tick(Duration::from_millis(100));
+            let cmd_arg = format!(
+                r#"cd {} && claude -p "We have done several changes to this repository. Please compare the repository against the main branch and write and return the a json object with the following structure:
+
+                    pr_description: string,
+                    pr_risk_factor: string,
+                    pr_risk_factor_description: string,
+                    pr_test_steps: string,
+                    pr_scopes: [],
+
+                pr_description should be a short summary of the changes. Write a paragraph with the main changes and if needed a bullet list with the main changes.
+                pr_risk_factor: should be one of High  Medium  Low  Trivial; choose an option based on how complex the changes were, the potential to break CI/CD deployments, and changes to user experiences.
+                pr_risk_factor_description: based on the selected risk factor describe why the option was selected,
+                pr_test_steps: describe how to manually test this PR and what we should be aware of; ideally mention commands to run, curl requests, etc,
+                pr_scopes: an array of options from web  api  ci; select all applicable based on the cahnges: were they done to the backend code, the frontend code or the deployment process.
+                " --output-format json "#,
+                &directory
+            );
+
+            let output = Command::new("sh")
+                .arg("-c")
+                .arg(cmd_arg)
+                .output()
+                .expect("Failed to run  process");
+
+            bar.finish();
+            if !&output.status.success() {
+                writeln!(handle, "{}\n{}\n{}", "\x1b[1;31mGetting results from Claude failed\x1b[0;0m", str::from_utf8(&output.stderr).unwrap(), "\n- Is `@anthropic-ai/claude-code` installed in the repository you are working with?\n- Is the key correctly set?").unwrap_or_default();
+                let _ = handle.flush();
+            }
+            let result: serde_json::Value =
+                serde_json::from_str(str::from_utf8(&output.stdout).unwrap()).unwrap();
+            println!("Result: {:?}\n", result);
+            let result_json = result.get("result").unwrap();
+            println!("Result JSON: {:?}\n", result_json);
+
+            let result_json_str = result_json.as_str().unwrap();
+            println!("Result JSON: {:?}\n", result_json);
+            let mut start_bytes = result_json_str.find("```json\n").unwrap();
+            start_bytes += 7;
+            let end_bytes = result_json_str.rfind("```").unwrap();
+
+            let result_sjon = &result_json_str[start_bytes..end_bytes];
+            let result_sjon_replace = result_sjon.replace("\n", "");
+            let final_json: serde_json::Value = serde_json::from_str(&result_sjon_replace).unwrap();
+            println!(
+                "search:{:?}, {:?}, \n{:?}",
+                result_sjon_replace,
+                final_json,
+                final_json.get("pr_description")
+            );
+            pr_description_string = Some(
+                final_json
+                    .get("pr_description")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+            );
+
+            let plain_pr_risk_factor_string =
+                final_json.get("pr_risk_factor").unwrap().as_str().unwrap();
+
+            if risk_factor_map.contains_key(&plain_pr_risk_factor_string) {
+                pr_risk_factor_string = Some(
+                    risk_factor_map
+                        .get(&plain_pr_risk_factor_string)
+                        .unwrap()
+                        .to_string(),
+                );
+            }
+
+            // pr_risk_factor_string = selected_risk_factor;
+            pr_risk_factor_description_string = Some(
+                final_json
+                    .get("pr_risk_factor_description")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+            );
+            pr_test_steps = Some(
+                final_json
+                    .get("pr_test_steps")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+            );
+        }
+        false => {
+            let pr_description_prompt =
+                Editor::new("Write a description for your PR and explain why it's important")
+                    .prompt();
+            let pr_description: Option<String> = match pr_description_prompt {
+                Ok(x) => Some(x),
+                Err(_) => None,
+            };
+            if pr_description.is_some() {
+                pr_description_string = pr_description;
+            }
+            let risk_options: Vec<&str> = vec!["High", "Medium", "Low", "Trivial"];
+            let risk_factor_prompt = Select::new("Select risk factor", risk_options).prompt();
+
+            let selected_risk_factor = match risk_factor_prompt {
+                Ok(risk_factor) => {
+                    if risk_factor_map.contains_key(&risk_factor) {
+                        Some(risk_factor_map.get(&risk_factor).unwrap().to_string())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+            if selected_risk_factor.is_some() {
+                pr_risk_factor_string = selected_risk_factor;
+            }
+            let risk_factor_description_prompt =
+                Editor::new("Describe why this risk factor was selected")
+                    .with_help_message("Describe why this risk factor was selected..")
+                    .prompt();
+            let risk_factor_description: Option<String> = match risk_factor_description_prompt {
+                Ok(x) => Some(x),
+                Err(_) => None,
+            };
+            if risk_factor_description.is_some() {
+                pr_risk_factor_description_string = risk_factor_description;
+            }
+            let manual_testing_description_prompt =
+        Editor::new("Describe how to manually test this PR").with_help_message("Create a simple, bullet pointed list, step by step on how to test. Make sure you call out the need for any extra config/services. Make it EASY for the person reviewing your PR").prompt();
+            let manual_testing_description: Option<String> = match manual_testing_description_prompt
+            {
+                Ok(x) => Some(x),
+                Err(_) => None,
+            };
+            if manual_testing_description.is_some() {
+                pr_test_steps = manual_testing_description;
             }
         }
-        _ => None,
-    };
+    }
 
-    if selected_risk_factor.is_some() {
+    if pr_description_string.is_some() {
+        pr_template += &"\n";
+        pr_template += &pr_description_string.unwrap();
+        pr_template += &"\n";
+        has_description = true;
+    } else {
+        pr_template += &"..."
+    }
+
+    if pr_risk_factor_string.is_some() {
         pr_template += &format!(
             "\n# 🚦 This is a {} risk PR\n",
-            selected_risk_factor.unwrap()
+            pr_risk_factor_string.unwrap()
         );
     }
-    //
-    let risk_factor_description_prompt = Editor::new("Describe why this risk factor was selected")
-        .with_help_message("Describe why this risk factor was selected..")
-        .prompt();
-    let risk_factor_description: Option<String> = match risk_factor_description_prompt {
-        Ok(x) => Some(x),
-        Err(_) => None,
-    };
-    if risk_factor_description.is_some() {
+
+    if pr_risk_factor_description_string.is_some() {
         pr_template += &"Because...";
         pr_template += &"\n";
-        pr_template += &risk_factor_description.unwrap();
+        pr_template += &pr_risk_factor_description_string.unwrap();
         pr_template += &"\n";
     } else {
         pr_template += &"Because...";
@@ -305,15 +439,9 @@ pub fn pr_template_prompt(issue_id: &str) -> String {
     }
 
     pr_template += &"\n## 🧪 How to manually test this PR";
-    let manual_testing_description_prompt =
-        Editor::new("Describe how to manually test this PR").with_help_message("Create a simple, bullet pointed list, step by step on how to test. Make sure you call out the need for any extra config/services. Make it EASY for the person reviewing your PR").prompt();
-    let manual_testing_description: Option<String> = match manual_testing_description_prompt {
-        Ok(x) => Some(x),
-        Err(_) => None,
-    };
-    if manual_testing_description.is_some() {
+    if pr_test_steps.is_some() {
         pr_template += &"\n";
-        pr_template += &manual_testing_description.unwrap();
+        pr_template += &pr_test_steps.unwrap();
         pr_template += &"\n";
     } else {
         pr_template += &"1.";
