@@ -114,25 +114,11 @@ See documentation at [anthropic](https://www.anthropic.com/claude-code).
 npx @adalbertosteixeira/pull-requests-cli ticket issues
 ```
 
-This command will allow you to get the description for issues in either Github or Clickup.
+This command will allow you to get the description for issues in either Github or Clickup. It will
+then pipe the issue description to Claude using the following prompt:
 
-### Getting issue from Clickup and piping it to Claude
-This command will load the description from the Clickup issue and run Claude Code in the background:
-```
-npx @adalbertosteixeira/pull-requests-cli ticket issue ********* | claude -p "Given the following issue description, implement all the changes required to the codebase."
-```
 
-To enter a REPL session:
-
-```
-npx @adalbertosteixeira/pull-requests-cli ticket issue ********* | claude  "Given the following issue description, implement all the changes required to the codebase."
-```
-
-> [!NOTE]
-> Running one-off queries always chaining additional commands. For example, having Claude implement
-> the changes then chaining it the commit automation (in the future, once all the features are
-> implemented).
-
+> Given the following issue description, implement all the changes required to the codebase.
 
 
 ### Commit helper
