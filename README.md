@@ -170,6 +170,12 @@ The tool will prompt you to push the branch to the origin.
 
 If no origin is set, it will propose a new origin and set the upstream.
 
+It's possible to only push to origin using the `push` command:
+
+```{sh}
+npx @adalbertosteixeira/pull-requests-cli push
+```
+
 
 ### Get help
 
