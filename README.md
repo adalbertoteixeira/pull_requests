@@ -1,7 +1,17 @@
 # Pull Requests
 
+[![npm version](https://img.shields.io/npm/v/@adalbertosteixeira/pull-requests-cli.svg)](https://www.npmjs.com/package/@adalbertosteixeira/pull-requests-cli)
+
 Tool to automate the creation of PRs for JavaScript repositories, using Clickup as the issue manager
 and Claude as the AI assistant.
+
+The end goal is to get as close as possible to getting a PR deployed using only AI and automations
+looking at Clickup issues.
+
+Currently implemented:
+
+- Get description from a Clickup ticket and pipe it into Claude code locally;
+- Build the ticket description, test steps, etc suing Calude code.
 
 This tool is currently tied heavily to my specific use case. Improvements to accommodate other use
 cases aren't currently in the Roadmap, but might be considered if tests start being added.
@@ -15,8 +25,12 @@ message;
 - Extracts type (and, in the future, scope) from the changed files;
 - Output the pre-build pr template by passing `-r`.
 
+<details>
+<summary>
 
 ## Install
+
+</summary>
 
 ### Install from npm (Recommended)
 
@@ -64,6 +78,14 @@ Add `.pull_requests` to your `.gitignore`.
 
 > [!TIP]
 > If installing through download or local build, add the resulting binary to the path: `export PATH="$PATH:/User/folder/"`.
+</details>
+
+<details>
+<summary>
+
+## Setup
+
+</summary>
 
 ### Add Clickup keys
 ```
@@ -74,6 +96,8 @@ export CLICKUP_WORKSPACE_ID=**********
 
 ### Install Claude Code
 See documentation at [anthropic](https://www.anthropic.com/claude-code).
+
+</details>
 
 
 ## Usage
