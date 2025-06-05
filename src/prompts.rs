@@ -232,7 +232,7 @@ pub fn commit_pr_prompt() -> bool {
 
 pub fn push_pr_prompt() -> bool {
     let push_pr_prompt_answer = Confirm::new("Push this branch?")
-        .with_default(false)
+        .with_default(true)
         .prompt();
 
     let answer = match push_pr_prompt_answer {

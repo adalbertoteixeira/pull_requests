@@ -13,6 +13,8 @@ pub fn commit_and_push(
     commit_message_additional_messages: Vec<String>,
     git_branch: &str,
     pr_template: Option<String>,
+    no_verify: bool,
+    cowboy_mode: bool,
 ) {
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
@@ -23,6 +25,7 @@ pub fn commit_and_push(
         commit_message_additional_messages.clone(),
         &git_branch,
         &pr_template,
+        no_verify,
     );
     info!("Will commit pr exit code");
     let commit_fail_message =
@@ -46,8 +49,13 @@ pub fn commit_and_push(
         pr_template_message.push_str(&pr_template.unwrap());
         writeln!(handle, "{}", pr_template_message).unwrap_or_default();
     }
-    let will_push_pr = prompts::push_pr_prompt();
+    let will_push_pr;
+    if cowboy_mode == true {
+        will_push_pr = true;
+    } else {
+        will_push_pr = prompts::push_pr_prompt();
+    }
     if will_push_pr == true {
-        let _ = branch_utils::push_pr(directory);
+        let _ = branch_utils::push_pr(directory, no_verify);
     }
 }

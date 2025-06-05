@@ -159,7 +159,7 @@ pub fn load_commit_template(git_branch: &str, directory: &str) {
     }
 }
 
-pub fn load_branch_config(git_branch: &str, directory: &str) {
+pub fn load_branch_config(git_branch: &str, directory: &str, no_verify: bool, cowboy_mode: bool) {
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
     let path = Path::new(directory).join(".commit_message");
@@ -194,6 +194,8 @@ pub fn load_branch_config(git_branch: &str, directory: &str) {
                 previous_commit_message_additional_messages,
                 git_branch,
                 Some(previous_pr_template),
+                no_verify,
+                cowboy_mode,
             );
             process::exit(0);
         }
@@ -277,12 +279,12 @@ pub fn save_branch_config(
 pub fn load_clickup_config(directory: &str) -> Result<Option<Vec<ClickupSpace>>, io::Error> {
     let path = Path::new(directory).join(".commit_message");
     let file_path = Path::new(&path).join("clickup.yaml");
-    
+
     if !file_path.exists() {
         info!("No clickup config file found at: {:?}", file_path);
         return Ok(None);
     }
-    
+
     match fs::File::open(&file_path) {
         Ok(file) => {
             let reader = io::BufReader::new(file);

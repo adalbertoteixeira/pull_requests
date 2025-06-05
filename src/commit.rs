@@ -22,9 +22,10 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str) {
     }
 
     let cowboy_mode = matches.is_present("cowboy_mode");
+    let no_verify = matches.is_present("no_verify");
     // Push the branch to origin only
     if matches.is_present("push_branch") {
-        branch_utils::push_pr(directory);
+        branch_utils::push_pr(directory, no_verify);
         process::exit(0);
     }
     let team_prefix = "INF";
@@ -68,7 +69,7 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str) {
     }
     let is_new_branch = storage::setup_branch_env(&git_branch, &directory).unwrap();
     if is_new_branch == false {
-        let _ = storage::load_branch_config(&git_branch, directory);
+        let _ = storage::load_branch_config(&git_branch, directory, no_verify, cowboy_mode);
     }
     info!("Is new branch: {}", &is_new_branch);
     let (proposed_type, used_types) =
@@ -199,7 +200,7 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str) {
 
     let mut build_pr_template = false;
     if cowboy_mode == true {
-        build_pr_template = true;
+        build_pr_template = is_new_branch;
     } else {
         let pr_template_prompt = Confirm::new(&confirm_message)
             .with_default(is_new_branch)
@@ -233,6 +234,8 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str) {
             additional_commit_message.clone(),
             &git_branch,
             pr_template,
+            no_verify,
+            cowboy_mode,
         );
     }
 }

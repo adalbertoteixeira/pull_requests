@@ -115,12 +115,20 @@ async fn main() {
                         .help("Push the branch to the origin")
                         .takes_value(false),
                 )
-        .arg(
-            Arg::with_name("cowboy_mode")
-                .long("cowboy-mode")
-                .help("Auto accept most prompts, except potentially destructive ones.")
-                .takes_value(false),
-        )
+                .arg(
+                    Arg::with_name("cowboy_mode")
+                        .long("cowboy-mode")
+                        .short("c")
+                        .help("Auto accept most prompts, except potentially destructive ones.")
+                        .takes_value(false),
+                )
+                .arg(
+                    Arg::with_name("no_verify")
+                        .short("n")
+                        .long("no-verify")
+                        .help("Skip git pre-commit and pre-push hooks")
+                        .takes_value(false),
+                )
         ])
         .get_matches();
 

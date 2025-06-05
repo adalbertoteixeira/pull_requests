@@ -199,11 +199,15 @@ pub fn commit_pr(
     additional_commit_message: Vec<String>,
     git_branch: &str,
     pr_template: &Option<String>,
+    no_verify: bool,
 ) -> Result<Option<i32>, io::Error> {
     let mut cmd_arg = format!(
         r#"cd {} && git commit -m  "{}""#,
         &directory, &commit_message
     );
+    if no_verify {
+        cmd_arg.push_str(" --no-verify");
+    }
     if additional_commit_message.len() > 0 {
         for message in &additional_commit_message {
             cmd_arg.push_str(&format!(r#" -m "{}""#, message));
@@ -246,8 +250,11 @@ pub fn commit_pr(
     Ok(output.status.code())
 }
 
-pub fn push_pr(directory: &str) -> Option<i32> {
-    let cmd_arg = format!(r#"cd {} && git push"#, &directory);
+pub fn push_pr(directory: &str, no_verify: bool) -> Option<i32> {
+    let mut cmd_arg = format!(r#"cd {} && git push"#, &directory);
+    if no_verify {
+        cmd_arg.push_str(" --no-verify");
+    }
     info!("Executing command: {}", cmd_arg);
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
@@ -307,10 +314,13 @@ pub fn push_pr(directory: &str) -> Option<i32> {
                                 str::from_utf8(&branch_output.stdout).unwrap().trim();
 
                             // Push with --set-upstream
-                            let upstream_cmd = format!(
+                            let mut upstream_cmd = format!(
                                 "cd {} && git push --set-upstream origin {}",
                                 directory, current_branch
                             );
+                            if no_verify {
+                                upstream_cmd.push_str(" --no-verify");
+                            }
                             info!("Executing command: {}", upstream_cmd);
 
                             writeln!(handle, "{}", "Setting upstream and pushing...")

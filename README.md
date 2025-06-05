@@ -126,13 +126,49 @@ npx @adalbertosteixeira/pull-requests-cli ticket issue ********* | claude  "Give
 > the changes then chaining it the commit automation (in the future, once all the features are
 > implemented).
 
-### git commit helper
+
+
+### Commit helper
+
 ![demo](static_files/first.gif)
-```
+
+The commit helper always the user to automate tasks to get the code into the repository:
+- create a commit message;
+- create a description based of a template;
+- push the branch to the repository.
+
+#### Commit message
+
+The commit message will follow the pattern:
+
+`TYPE: MESSAGE [TEAM] #ID`
+
+**Base usage**
+This option will try to take the values from the branch name and the code changed and prompt the
+user for the template creation.
+
+```{sh}
 npx @adalbertosteixeira/pull-requests-cli commit
 ```
 
 
+**With Claude**
+This option will try to take the values from the branch name and the code changed and use Claude to
+build the PR template.
+```{sh}
+npx @adalbertosteixeira/pull-requests-cli commit --claude
+```
+
+**Flags and options**
+```{sh}
+npx @adalbertosteixeira/pull-requests-cli commit --help
+```
+
+#### Pushing to origin
+
+The tool will prompt you to push the branch to the origin.
+
+If no origin is set, it will propose a new origin and set the upstream.
 
 
 ### Get help
@@ -158,3 +194,7 @@ etc).
 - [ ] allow reuse of existing PR template (changing fields if necessary);
 - [ ] create pull request from the branch if it doesn't exist yet;
 - [ ] automate version bumping and tagging.
+- [ ] allow customizing the commit message 
+- [ ] When running pre-commits and pre-pushes, if there are errors, prompt the user to pipe the
+result to Claude
+- [ ] allow customizing the PR template 
