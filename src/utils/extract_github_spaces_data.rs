@@ -1,10 +1,12 @@
 use crate::storage::{GithubSpace, save_github_config};
+use indicatif::ProgressBar;
 use log::{debug, info};
 use reqwest::Client;
 use serde_json::json;
 use std::{
     io::{self, Write},
     process,
+    time::Duration,
 };
 
 #[derive(Debug, Clone)]
@@ -26,6 +28,9 @@ pub async fn make_github_request(
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let mut authorization: String = "Bearer ".to_owned();
     authorization.push_str(github_api_token);
+
+    let bar = ProgressBar::new_spinner();
+    bar.enable_steady_tick(Duration::from_millis(100));
     let res = client
         .get(url)
         .header("Accept", "application/vnd.github+json")
@@ -35,6 +40,7 @@ pub async fn make_github_request(
         .send()
         .await?;
 
+    bar.finish();
     let status = res.status();
     info!("Status: {}", status);
 

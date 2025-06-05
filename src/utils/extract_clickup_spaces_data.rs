@@ -1,14 +1,15 @@
 use crate::storage::{
-    ClickupMember, ClickupPriority, ClickupSpace, ClickupStatus, ClickupTask, ClickupYamlConfig,
-    GithubSpace, save_clickup_config, save_github_config,
+    ClickupMember, ClickupPriority, ClickupSpace, ClickupStatus, ClickupYamlConfig, GithubSpace,
+    save_clickup_config,
 };
 use clap::ArgMatches;
+use indicatif::ProgressBar;
 use log::{debug, info};
 use reqwest::Client;
-use serde_json::json;
 use std::{
     io::{self, Write},
     process,
+    time::Duration,
 };
 
 pub struct GithubSpaceData {
@@ -23,12 +24,15 @@ pub async fn make_clickup_request(
     url: &str,
     api_key: &str,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let bar = ProgressBar::new_spinner();
+    bar.enable_steady_tick(Duration::from_millis(100));
     let res = client
         .get(url)
         .header("Accept", "application/json")
         .header("Authorization", api_key)
         .send()
         .await?;
+    bar.finish();
 
     let status = res.status();
     info!("Status: {}", status);
