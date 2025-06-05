@@ -26,6 +26,8 @@ async fn main() {
     let matches_clone = matches.clone();
     let directory = matches_clone.value_of("directory").unwrap_or(".");
 
+    let github_api_token = matches.value_of("github_api_token").unwrap_or("");
+
     info!("Base directory is {:?}", directory);
     path_utils::top_level(&directory.to_owned());
 
@@ -42,6 +44,7 @@ async fn main() {
             matches.subcommand_matches("commit").unwrap().clone(),
             &git_branch,
             &directory,
+            github_api_token,
         );
     }
 
@@ -49,6 +52,7 @@ async fn main() {
         let _ = ticket::ticket(
             matches.subcommand_matches("ticket").unwrap().clone(),
             &directory,
+            github_api_token,
         )
         .await;
     }

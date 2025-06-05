@@ -109,6 +109,13 @@ See documentation at [anthropic](https://www.anthropic.com/claude-code).
 > [!NOTE]
 > For clarity and ease of use we're using the npm command, but running the binary directly will be faster.
 
+### Getting issue from Clickup  or Github
+```
+npx @adalbertosteixeira/pull-requests-cli ticket issues
+```
+
+This command will allow you to get the description for issues in either Github or Clickup.
+
 ### Getting issue from Clickup and piping it to Claude
 This command will load the description from the Clickup issue and run Claude Code in the background:
 ```
@@ -204,3 +211,4 @@ etc).
 - [ ] When running pre-commits and pre-pushes, if there are errors, prompt the user to pipe the
 result to Claude
 - [ ] allow customizing the PR template 
+- [ ] implement Github and Clickup issues temporary caching

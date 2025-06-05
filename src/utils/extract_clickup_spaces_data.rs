@@ -1,19 +1,21 @@
 use crate::storage::{
-    ClickupMember, ClickupPriority, ClickupSpace, ClickupStatus, save_clickup_config,
+    ClickupMember, ClickupPriority, ClickupSpace, ClickupStatus, ClickupTask, ClickupYamlConfig,
+    GithubSpace, save_clickup_config, save_github_config,
 };
 use clap::ArgMatches;
 use log::{debug, info};
 use reqwest::Client;
+use serde_json::json;
 use std::{
     io::{self, Write},
     process,
 };
 
+pub struct GithubSpaceData {
+    pub spaces: Vec<GithubSpace>,
+}
 pub struct ClickupSpacesData {
     pub spaces: Vec<ClickupSpace>,
-    // pub members: Vec<ClickupMember>,
-    // pub statuses: Vec<ClickupStatus>,
-    // pub priorities: Vec<ClickupPriority>,
 }
 
 pub async fn make_clickup_request(
@@ -37,6 +39,7 @@ pub async fn make_clickup_request(
     }
 
     let body: serde_json::Value = res.json().await?;
+    debug!("Github body {:?}", body);
     Ok(body)
 }
 
@@ -44,7 +47,7 @@ pub async fn extract_clickup_spaces_data(
     directory: &str,
     matches: &ArgMatches<'static>,
     client: &Client,
-) -> Result<(), String> {
+) -> Result<Option<ClickupYamlConfig>, String> {
     debug!("Calling subcommnand workspaces function {:?}", matches);
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
@@ -165,6 +168,8 @@ pub async fn extract_clickup_spaces_data(
     }
     info!("clickup spaces {:?}", clickup_spaces);
 
-    let _ = save_clickup_config(&directory, Some(clickup_spaces));
-    Ok(())
+    let clickup_yaml_config = save_clickup_config(&directory, Some(clickup_spaces))
+        .ok()
+        .expect("Should have save the Clickup config");
+    Ok(clickup_yaml_config)
 }

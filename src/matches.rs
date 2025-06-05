@@ -41,8 +41,13 @@ pub fn build_matches() -> ArgMatches<'static> {
                         .required(true),
                 )
                 .subcommands(vec![
-                    SubCommand::with_name("spaces"),
-                    SubCommand::with_name("issues"),
+                    SubCommand::with_name("spaces").long_about("Get base data for the available repositories in Github and / or workspaces in Github.
+This data is used to run searches against the services."),
+                    SubCommand::with_name("issues").arg(
+                        Arg::with_name("issue_id")
+                            .help("id for the task to extract. Currently only available for Clickup")
+                            .takes_value(true),
+                    ),
                     SubCommand::with_name("issue").arg(
                         Arg::with_name("issue")
                             .help("Get description from Clickup ticket so we can pipe it into another tool.")

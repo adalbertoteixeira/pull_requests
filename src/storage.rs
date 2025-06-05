@@ -12,11 +12,27 @@ use serde::{Deserialize, Serialize};
 
 use crate::{prompts, ux_utils};
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GithubSpace {
+    pub id: i64,
+    pub name: String,
+    pub full_name: String,
+    pub url: String,
+    pub description: String,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
-struct ClickupYamlConfig {
-    clickup_spaces: Option<Vec<ClickupSpace>>,
-    created_at: String,
-    updated_at: Option<String>,
+struct GithubYamlConfig {
+    pub github_spaces: Option<Vec<GithubSpace>>,
+    pub created_at: String,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ClickupYamlConfig {
+    pub clickup_spaces: Option<Vec<ClickupSpace>>,
+    pub created_at: String,
+    pub updated_at: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -26,6 +42,11 @@ pub struct ClickupSpace {
     pub priorities: Option<Vec<ClickupPriority>>,
     pub members: Option<Vec<ClickupMember>>,
     pub statuses: Option<Vec<ClickupStatus>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ClickupTask {
+    pub id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -276,7 +297,7 @@ pub fn save_branch_config(
     Ok(())
 }
 
-pub fn load_clickup_config(directory: &str) -> Result<Option<Vec<ClickupSpace>>, io::Error> {
+pub fn load_clickup_config(directory: &str) -> Result<Option<ClickupYamlConfig>, io::Error> {
     let path = Path::new(directory).join(".commit_message");
     let file_path = Path::new(&path).join("clickup.yaml");
 
@@ -291,7 +312,7 @@ pub fn load_clickup_config(directory: &str) -> Result<Option<Vec<ClickupSpace>>,
             match serde_yml::from_reader::<_, ClickupYamlConfig>(reader) {
                 Ok(file_read) => {
                     info!("Successfully loaded clickup config: {:?}", file_read);
-                    Ok(file_read.clickup_spaces)
+                    Ok(Some(file_read))
                 }
                 Err(e) => {
                     info!("Failed to parse clickup YAML: {}", e);
@@ -309,7 +330,7 @@ pub fn load_clickup_config(directory: &str) -> Result<Option<Vec<ClickupSpace>>,
 pub fn save_clickup_config(
     directory: &str,
     clickup_spaces: Option<Vec<ClickupSpace>>,
-) -> Result<(), io::Error> {
+) -> Result<Option<ClickupYamlConfig>, io::Error> {
     info!(
         "Saving clickup spaces for clickup: {:?} in {}",
         &clickup_spaces, &directory
@@ -340,6 +361,78 @@ pub fn save_clickup_config(
 
     if clickup_spaces.is_some() {
         yaml_config.clickup_spaces = Some(clickup_spaces.unwrap());
+    }
+
+    yaml_config.updated_at = Some(local_time_string);
+    let file = File::create(&file_path).expect("Failed to create file");
+    serde_yml::to_writer(file, &yaml_config).expect("Failed to write YAML");
+    Ok(Some(yaml_config))
+}
+
+pub fn load_github_config(directory: &str) -> Result<Option<Vec<GithubSpace>>, io::Error> {
+    let path = Path::new(directory).join(".commit_message");
+    let file_path = Path::new(&path).join("github.yaml");
+
+    if !file_path.exists() {
+        info!("No github config file found at: {:?}", file_path);
+        return Ok(None);
+    }
+
+    match fs::File::open(&file_path) {
+        Ok(file) => {
+            let reader = io::BufReader::new(file);
+            match serde_yml::from_reader::<_, GithubYamlConfig>(reader) {
+                Ok(file_read) => {
+                    info!("Successfully loaded github config: {:?}", file_read);
+                    Ok(file_read.github_spaces)
+                }
+                Err(e) => {
+                    info!("Failed to parse github YAML: {}", e);
+                    Err(io::Error::new(io::ErrorKind::InvalidData, e))
+                }
+            }
+        }
+        Err(e) => {
+            info!("Failed to open github config file: {}", e);
+            Err(e)
+        }
+    }
+}
+
+pub fn save_github_config(
+    directory: &str,
+    github_spaces: Option<Vec<GithubSpace>>,
+) -> Result<(), io::Error> {
+    info!(
+        "Saving github spaces for github: {:?} in {}",
+        &github_spaces, &directory
+    );
+    let path = Path::new(directory).join(".commit_message");
+    if !path.exists() {
+        info!("Creating directory: {:?}", &path);
+        fs::create_dir_all(&path).unwrap();
+    }
+
+    let file_path = Path::new(&path).join("github.yaml");
+
+    let mut yaml_config;
+    let local_time: DateTime<Local> = Local::now();
+    let local_time_string = local_time.format("%Y-%m-%d %H:%M:%S").to_string();
+    if file_path.exists() {
+        let file = fs::File::open(&file_path).expect("Failed to open file");
+        let reader = io::BufReader::new(file);
+        yaml_config = serde_yml::from_reader(reader).expect("Failed to parse YAML");
+        info!("File: {:?}", yaml_config);
+    } else {
+        yaml_config = GithubYamlConfig {
+            github_spaces: None, // github_name: git_github.to_string(),
+            created_at: local_time_string.clone(),
+            updated_at: None,
+        };
+    };
+
+    if github_spaces.is_some() {
+        yaml_config.github_spaces = Some(github_spaces.unwrap());
     }
 
     yaml_config.updated_at = Some(local_time_string);
