@@ -250,7 +250,7 @@ pub fn commit_pr(
     Ok(output.status.code())
 }
 
-pub fn push_pr(directory: &str, no_verify: bool) -> Option<i32> {
+pub fn push_pr(directory: &str, no_verify: bool, cowboy_mode: bool) -> Option<i32> {
     let mut cmd_arg = format!(r#"cd {} && git push"#, &directory);
     if no_verify {
         cmd_arg.push_str(" --no-verify");
@@ -290,11 +290,14 @@ pub fn push_pr(directory: &str, no_verify: bool) -> Option<i32> {
             writeln!(handle, "{}", stderr).unwrap_or_default();
             let _ = handle.flush();
 
-            let set_upstream_prompt = Confirm::new(
-                "Do you want to push and set the current branch as upstream on origin?",
-            )
-            .with_default(true)
-            .prompt();
+            let set_upstream_prompt = match cowboy_mode {
+                true => Ok(true),
+                false => Confirm::new(
+                    "Do you want to push and set the current branch as upstream on origin?",
+                )
+                .with_default(true)
+                .prompt(),
+            };
 
             match set_upstream_prompt {
                 Ok(response) => {

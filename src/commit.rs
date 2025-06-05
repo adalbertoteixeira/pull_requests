@@ -12,7 +12,7 @@ use std::{
     str,
 };
 
-pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str) {
+pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str, github_api_token: &str) {
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
     // Show the PR template only
@@ -23,11 +23,6 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str) {
 
     let cowboy_mode = matches.is_present("cowboy_mode");
     let no_verify = matches.is_present("no_verify");
-    // Push the branch to origin only
-    if matches.is_present("push_branch") {
-        branch_utils::push_pr(directory, no_verify);
-        process::exit(0);
-    }
     let team_prefix = "INF";
     let mut issue_id = branch_utils::issue_id(&git_branch);
     let message_name;

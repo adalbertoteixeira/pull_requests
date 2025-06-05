@@ -57,6 +57,28 @@ async fn main() {
                             .takes_value(true),
                     ),
                 ]),
+            SubCommand::with_name("push")                .arg(
+                    Arg::with_name("push_branch")
+                        .long("push-branch")
+                        .value_name("push-branch")
+                        .help("Push the branch to the origin")
+                        .takes_value(false),
+                )
+                .arg(
+                    Arg::with_name("cowboy_mode")
+                        .long("cowboy-mode")
+                        .short("c")
+                        .help("Auto accept most prompts, except potentially destructive ones.")
+                        .takes_value(false),
+                )
+                .arg(
+                    Arg::with_name("no_verify")
+                        .short("n")
+                        .long("no-verify")
+                        .help("Skip git pre-commit and pre-push hooks")
+                        .takes_value(false),
+                )
+,
             SubCommand::with_name("commit")
                 .arg(
                     Arg::with_name("claude")
@@ -109,13 +131,6 @@ async fn main() {
                         .takes_value(false),
                 )
                 .arg(
-                    Arg::with_name("push_branch")
-                        .long("push-branch")
-                        .value_name("push-branch")
-                        .help("Push the branch to the origin")
-                        .takes_value(false),
-                )
-                .arg(
                     Arg::with_name("cowboy_mode")
                         .long("cowboy-mode")
                         .short("c")
@@ -144,6 +159,13 @@ async fn main() {
     path_utils::top_level(&directory.to_owned());
 
     let git_branch = path_utils::git_branch(&directory);
+    if let Some(_) = matches.subcommand_matches("push") {
+        let commit_matches = matches.subcommand_matches("commit").unwrap().clone();
+        let no_verify = commit_matches.is_present("no_verify");
+        let cowboy_mode = commit_matches.is_present("cowboy_mode");
+        branch_utils::push_pr(directory, no_verify, cowboy_mode);
+    }
+
     if let Some(_) = matches.subcommand_matches("commit") {
         commit::commit(
             matches.subcommand_matches("commit").unwrap().clone(),

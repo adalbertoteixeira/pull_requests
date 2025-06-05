@@ -49,13 +49,11 @@ pub fn commit_and_push(
         pr_template_message.push_str(&pr_template.unwrap());
         writeln!(handle, "{}", pr_template_message).unwrap_or_default();
     }
-    let will_push_pr;
-    if cowboy_mode == true {
-        will_push_pr = true;
-    } else {
-        will_push_pr = prompts::push_pr_prompt();
-    }
+    let will_push_pr = match cowboy_mode {
+        true => true,
+        false => prompts::push_pr_prompt(),
+    };
     if will_push_pr == true {
-        let _ = branch_utils::push_pr(directory, no_verify);
+        let _ = branch_utils::push_pr(directory, no_verify, cowboy_mode);
     }
 }
