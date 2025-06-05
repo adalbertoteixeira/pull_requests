@@ -1,6 +1,6 @@
 {
   "name": "@adalbertosteixeira/pull-requests-cli",
-  "version": "0.1.6",
+  "version": "0.2.1",
   "description": "Git pull request automation tool for JavaScript repositories",
   "keywords": [
     "git",
