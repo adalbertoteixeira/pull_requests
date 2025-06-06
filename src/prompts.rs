@@ -273,7 +273,7 @@ pub fn pr_template_prompt(issue_id: &str, use_claude: bool, directory: &str) -> 
             let bar = ProgressBar::new_spinner();
             bar.enable_steady_tick(Duration::from_millis(100));
             let cmd_arg = format!(
-                r#"cd {} && claude -p "We have done several changes to this repository. Please compare the repository against the main branch and write and return the a json object with the following structure:
+                r#"cd {} && claude --model sonnet -p "We have done several changes to this repository. Please compare the repository against the main branch and write and return the a json object with the following structure:
 
                     pr_description: string,
                     pr_risk_factor: string,

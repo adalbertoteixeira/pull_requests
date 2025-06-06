@@ -70,14 +70,14 @@ pub struct ClickupMember {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct BranchYamlConfig {
-    branch_name: String,
-    created_at: String,
-    updated_at: Option<String>,
-    pr_template: Option<String>,
-    commit_message: Option<String>,
-    additional_message: Option<Vec<String>>,
-    last_commit_exit_code: Option<i32>,
+pub struct BranchYamlConfig {
+    pub branch_name: String,
+    pub created_at: String,
+    pub updated_at: Option<String>,
+    pub pr_template: Option<String>,
+    pub commit_message: Option<String>,
+    pub additional_message: Option<Vec<String>>,
+    pub last_commit_exit_code: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -178,6 +178,55 @@ pub fn load_commit_template(git_branch: &str, directory: &str) {
             process::exit(0)
         }
     }
+}
+
+pub fn get_branch_config(
+    git_branch: &str,
+    directory: &str,
+) -> Result<Option<BranchYamlConfig>, io::Error> {
+    let path = Path::new(directory).join(".commit_message");
+    let file_path = Path::new(&path).join(format!("{}.yaml", &git_branch));
+    let file = fs::File::open(&file_path).expect("Failed to open file");
+    let reader = io::BufReader::new(file);
+    let file_read: Option<BranchYamlConfig> = match serde_yml::from_reader(reader) {
+        Ok(x) => Some(x),
+        Err(_) => None,
+    };
+    Ok(file_read)
+    // Ok(file_read)
+    // if file_read.last_commit_exit_code.is_some_and(|i| i != 0) {
+    //     let previous_commit_message = file_read.commit_message.as_ref().unwrap().to_owned();
+    //     let previous_commit_message_additional_messages =
+    //         file_read.additional_message.as_ref().unwrap().to_owned();
+    //     let previous_pr_template = file_read
+    //         .pr_template
+    //         .as_ref()
+    //         .unwrap_or(&"".to_string())
+    //         .to_owned();
+    //     let mut proposed_ouput_message = "\x1b[1;33mFound a failed commit:\n".to_owned();
+    //     proposed_ouput_message.push_str("\n");
+    //     proposed_ouput_message.push_str(&previous_commit_message);
+    //     for addition_message in &previous_commit_message_additional_messages {
+    //         proposed_ouput_message.push_str("\n");
+    //         proposed_ouput_message.push_str(&addition_message);
+    //     }
+    //     proposed_ouput_message.push_str("\n");
+    //     writeln!(handle, "{}", proposed_ouput_message).unwrap_or_default();
+    //     let _ = handle.flush();
+    //     let will_commit_pr = prompts::commit_pr_prompt();
+    //     if will_commit_pr == true {
+    //         ux_utils::commit_and_push(
+    //             directory,
+    //             previous_commit_message,
+    //             previous_commit_message_additional_messages,
+    //             git_branch,
+    //             Some(previous_pr_template),
+    //             no_verify,
+    //             cowboy_mode,
+    //         );
+    //         process::exit(0);
+    //     }
+    // }
 }
 
 pub fn load_branch_config(git_branch: &str, directory: &str, no_verify: bool, cowboy_mode: bool) {
