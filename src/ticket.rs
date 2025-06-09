@@ -18,6 +18,7 @@ use crate::{
         load_github_config, save_branch_config,
     },
     utils::{
+        claude,
         extract_clickup_spaces_data::{extract_clickup_spaces_data, make_clickup_request},
         extract_github_spaces_data::{
             GithubIssue, extract_github_spaces_data, get_github_user_issues,
@@ -121,6 +122,7 @@ async fn automation_from_issue_id(
         }
     }
 
+    debug!("Asking for suggestions ---- {}, {} 2", directory, issue_id);
     let mut issue_description = None;
     let mut issue_name = None;
     let mut claude_suggestion = None;
@@ -188,13 +190,12 @@ async fn automation_from_issue_id(
     }
 
     if claude_suggestion.is_none() {
-        debug!("Asking for suggestion");
-        let prompt_text = format!(
-            "Given the following issue description, define the best approach to implement these changes\n{:?}.\nWrite the output outlining all the files the developer might need to look into, suggesting the best viable path to implement the changes.\nOutput the result starting with: \"Our suggestion to implement the needed changes is the following\"",
-            &issue_description
-        );
+        let prompt_header = "Given the following issue description, define the best approach to implement these changes. Write the output outlining all the files the developer might need to look into, suggesting the best viable path to implement the changes. Output the result starting with: \"Our suggestion to implement the needed changes is the following\"";
+        let prompt_text = &issue_description.clone().unwrap();
+
         let claude_suggestion_prompt_result =
-            prompt_claude_one_off(&prompt_text, directory).expect("result from prompt analyzis");
+            prompt_claude_one_off(&prompt_header, &prompt_text, directory)
+                .expect("should get Claude response");
         claude_suggestion = Some(claude_suggestion_prompt_result.clone());
         debug!("Getting suggestion {:?}", claude_suggestion);
         let _ = save_branch_config(
@@ -211,10 +212,11 @@ async fn automation_from_issue_id(
         );
     }
 
-    println!("suggestion is{:?}", claude_suggestion);
+    let prompt_issue_description = issue_description.clone().unwrap();
+    let prompt_claude_suggestion = claude_suggestion.clone().unwrap();
     let prompt_text = format!(
-        "Given the following issue description, implement all the changes required to the codebase:\n{:?}\n{:?}",
-        &issue_description, &claude_suggestion
+        r#"Given the following issue description, implement all the changes required to the codebase:\n{:?}\n{:?}"#,
+        &prompt_issue_description, &prompt_claude_suggestion
     );
 
     let _ = prompt_claude(&prompt_text, directory);
@@ -233,45 +235,55 @@ fn create_git_branch(issue_id: &str, issue_name: &str) -> String {
     format!("{}-{}", issue_id, parsed_name)
 }
 
-fn prompt_claude_one_off(prompt_text: &str, directory: &str) -> Result<String, io::Error> {
+fn prompt_claude_one_off(
+    prompt_header: &str,
+    prompt_text: &str,
+    directory: &str,
+) -> Result<String, io::Error> {
     let stdout = io::stdout();
     let mut handle = io::BufWriter::new(&stdout);
-
     let bar = ProgressBar::new_spinner();
     bar.enable_steady_tick(Duration::from_millis(100));
-    // Spawn an interactive shell
-    let output = Command::new("claude")
-        .arg("-p")
-        .arg(prompt_text)
-        .current_dir(&directory)
-        // .stdin(Stdio::inherit())
-        // .stdout(Stdio::inherit())
-        // .stderr(Stdio::inherit())
-        // .spawn()
-        // .expect("Failed to spawn interactive shell");
+
+    let initial_prompt = format!(r#"{}"#, prompt_text).replace("'", "\'");
+
+    // Save prompt to system tmp file
+    let tmp_file_path = format!("/tmp/claude_prompt_{}.txt", std::process::id());
+    fs::write(&tmp_file_path, &initial_prompt).expect("Failed to write prompt to tmp file");
+
+    let cmd_arg = format!(
+        r#"cd {} &&  cat {} | claude --model sonnet --output-format json  -p {}"#,
+        &directory, tmp_file_path, prompt_header
+    );
+
+    println!("{:?}", cmd_arg);
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(cmd_arg)
         .output()
-        .unwrap();
-    // Wait for the shell to exit
-    // let status = child.wait().expect("Failed to wait for shell");
-    // info!("Shell exited with status: {:?}", status);
-    // writeln!(
-    //     handle,
-    //     "{}",
-    //     "Work is done. We are working to implement the next automations in the future."
-    // )
-    // .unwrap_or_default();
-    // let _ = handle.flush();
+        .expect("Failed to run  process");
+
     bar.finish();
     if !output.status.success() {
-        let error = str::from_utf8(&output.stderr).unwrap();
-        writeln!(handle, "{}", error,).unwrap_or_default();
+        let error = str::from_utf8(&output.stderr).unwrap_or_default();
+        let message = str::from_utf8(&output.stdout).unwrap_or_default();
+        writeln!(
+            handle,
+            "There was an issue: \x1b[1;31m{} {}\x1b[1;0m",
+            error, message
+        )
+        .unwrap_or_default();
         let _ = handle.flush();
         process::exit(1)
     }
 
     let result_stdout_string = str::from_utf8(&output.stdout).unwrap();
-    println!("{:?}", result_stdout_string);
-    Ok(result_stdout_string.to_string())
+
+    let result_json: serde_json::Value = serde_json::from_str(&result_stdout_string).unwrap();
+    let result = result_json.get("result").unwrap().as_str().unwrap();
+
+    info!("done");
+    Ok(result.to_string())
 }
 
 fn prompt_claude(prompt_text: &str, directory: &str) {
@@ -411,7 +423,7 @@ pub async fn ticket(matches: ArgMatches<'static>, directory: &str, github_api_to
                             Some(task_description) => {
                                 let prompt_text = format!(
                                     "Given the following issue description, implement all the changes required to the codebase:\n{:?}",
-                                    &task_description
+                                    &task_description.as_str().unwrap()
                                 );
 
                                 let _ = prompt_claude(&prompt_text, directory);
@@ -458,7 +470,7 @@ pub async fn ticket(matches: ArgMatches<'static>, directory: &str, github_api_to
                 process::exit(1);
             }
 
-            let _ = automation_from_issue_id(directory, issue_id, &client, &clickup_api_key);
+            let _ = automation_from_issue_id(directory, issue_id, &client, &clickup_api_key).await;
         }
         _ => {}
     }
