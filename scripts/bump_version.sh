@@ -80,23 +80,11 @@ echo "New version: $NEW_VERSION"
 
 # Update Cargo.toml
 echo "Updating Cargo.toml..."
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
-    sed -i '' -E "s/^version = \".*\"/version = \"$NEW_VERSION\"/" "$CARGO_TOML"
-else
-    # Linux
-    sed -i -E "s/^version = \".*\"/version = \"$NEW_VERSION\"/" "$CARGO_TOML"
-fi
+sed -i -E "s/^version = \".*\"/version = \"$NEW_VERSION\"/" "$CARGO_TOML"
 
 # Update package.json
 echo "Updating package.json..."
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
-    sed -i '' -E "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" "$PACKAGE_JSON"
-else
-    # Linux
-    sed -i -E "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" "$PACKAGE_JSON"
-fi
+sed -i -E "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" "$PACKAGE_JSON"
 
 echo "Version bump complete!"
 echo "Updated to version $NEW_VERSION in both Cargo.toml and package.json"
