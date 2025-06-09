@@ -242,6 +242,10 @@ pub fn commit_pr(
         Some(commit_message.to_string()),
         Some(additional_commit_message.clone()),
         output.status.code(),
+        None,
+        None,
+        None,
+        None,
     );
     debug!(
         "Save config result is {:?}",

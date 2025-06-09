@@ -78,6 +78,10 @@ pub struct BranchYamlConfig {
     pub commit_message: Option<String>,
     pub additional_message: Option<Vec<String>>,
     pub last_commit_exit_code: Option<i32>,
+    pub issue_id: Option<String>,
+    pub issue_name: Option<String>,
+    pub issue_description: Option<String>,
+    pub claude_suggestion: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -279,6 +283,10 @@ pub fn save_branch_config(
     commit_message: Option<String>,
     additional_message: Option<Vec<String>>,
     commit_exit_code: Option<i32>,
+    issue_id: Option<String>,
+    issue_name: Option<String>,
+    issue_description: Option<String>,
+    claude_suggestion: Option<String>,
 ) -> Result<(), io::Error> {
     info!(
         "Saving branch config for branch: {} in {}",
@@ -315,6 +323,22 @@ pub fn save_branch_config(
             file_read.last_commit_exit_code = commit_exit_code;
         }
 
+        if issue_id.is_some() {
+            file_read.issue_id = issue_id;
+        }
+
+        if issue_description.is_some() {
+            file_read.issue_description = issue_description;
+        }
+
+        if issue_name.is_some() {
+            file_read.issue_name = issue_name;
+        }
+
+        if claude_suggestion.is_some() {
+            file_read.claude_suggestion = claude_suggestion;
+        }
+
         let file = File::create(&file_path).expect("Failed to create file");
         serde_yml::to_writer(file, &file_read).expect("Failed to write YAML");
     } else {
@@ -327,6 +351,10 @@ pub fn save_branch_config(
             commit_message: None,
             additional_message: None,
             last_commit_exit_code: Some(1),
+            issue_id: None,
+            issue_name: None,
+            issue_description: None,
+            claude_suggestion: None,
         };
         if pr_template.is_some() {
             yaml_config.pr_template = pr_template;
@@ -339,6 +367,21 @@ pub fn save_branch_config(
         }
         if commit_exit_code.is_some() {
             yaml_config.last_commit_exit_code = commit_exit_code;
+        }
+        if issue_id.is_some() {
+            yaml_config.issue_id = issue_id;
+        }
+
+        if issue_description.is_some() {
+            yaml_config.issue_description = issue_description;
+        }
+
+        if issue_name.is_some() {
+            yaml_config.issue_name = issue_name;
+        }
+
+        if claude_suggestion.is_some() {
+            yaml_config.claude_suggestion = claude_suggestion
         }
         let file = File::create(&file_path).expect("Failed to create file");
         serde_yml::to_writer(file, &yaml_config).expect("Failed to write YAML");

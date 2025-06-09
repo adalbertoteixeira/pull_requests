@@ -2,16 +2,13 @@ use crate::branch_utils;
 use crate::prompts;
 use crate::storage;
 use crate::utils::claude;
-use crate::utils::claude::parse_claude_response;
 use crate::ux_utils;
 use clap::ArgMatches;
 use indicatif::ProgressBar;
 use inquire::Confirm;
 use log::debug;
 use log::{error, info, warn};
-use std::io::{BufRead, BufReader};
 use std::process::Command;
-use std::process::Stdio;
 use std::time::Duration;
 use std::{
     io::{self, Write},

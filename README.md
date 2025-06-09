@@ -120,6 +120,16 @@ then pipe the issue description to Claude using the following prompt:
 
 > Given the following issue description, implement all the changes required to the codebase.
 
+### Getting Claude to work on your issues
+```
+npx @adalbertosteixeira/pull-requests-cli ticket issue --issue-id ISSUE_ID
+```
+
+This command will:
+- get the issue description from Clickup;
+- prepare a plan to prepare the implementation;
+- start an interactive shell to work on the issue;
+
 
 ### Commit helper
 

@@ -49,7 +49,8 @@ This data is used to run searches against the services."),
                             .takes_value(true),
                     ),
                     SubCommand::with_name("issue").arg(
-                        Arg::with_name("issue")
+                        Arg::with_name("issue-id")
+                            .long("issue-id")
                             .help("Get description from Clickup ticket so we can pipe it into another tool.")
                             .required(true)
                             .takes_value(true),
