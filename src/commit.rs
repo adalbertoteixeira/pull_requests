@@ -29,8 +29,10 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str, github_api
 
     let cowboy_mode = matches.is_present("cowboy_mode");
     let no_verify = matches.is_present("no_verify");
-    let stored_pr_template =
-        storage::get_branch_config(git_branch, directory).expect("Should load branch");
+    let stored_pr_template = match storage::get_branch_config(git_branch, directory) {
+        Ok(x) => x,
+        Err(_) => None,
+    };
     let mut commit_message = None;
     let mut pr_template = None;
     match stored_pr_template {
