@@ -7,14 +7,16 @@ use log::{debug, info};
 
 use crate::{branch_utils, prompts};
 
-pub fn commit_and_push(
+pub async fn commit_and_push(
     directory: &str,
     commit_message: String,
     commit_message_additional_messages: Vec<String>,
     git_branch: &str,
     pr_template: Option<String>,
     no_verify: bool,
-    cowboy_mode: bool,
+    ci_mode: bool,
+    github_api_token: Option<&str>,
+    has_gh: bool,
 ) {
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
@@ -24,7 +26,7 @@ pub fn commit_and_push(
         &commit_message,
         commit_message_additional_messages.clone(),
         &git_branch,
-        &pr_template,
+        pr_template.clone(),
         no_verify,
     );
     info!("Will commit pr exit code");
@@ -45,15 +47,29 @@ pub fn commit_and_push(
         process::exit(1);
     }
     if pr_template.is_some() {
-        let mut pr_template_message = "\n\x1b[1;32mYour PR template is below. You can copy it and add it to Github PR descripton:\x1b[1;0m\n\n".to_owned();
-        pr_template_message.push_str(&pr_template.unwrap());
+        let pr_template_message =
+            "\x1b[1;32mThere is a PR template available.\x1b[1;0m Use `commit --show-pr-template` to display it.".to_owned();
         writeln!(handle, "{}", pr_template_message).unwrap_or_default();
+        let _ = handle.flush();
     }
-    let will_push_pr = match cowboy_mode {
+    let will_push_pr = match ci_mode {
         true => true,
         false => prompts::push_pr_prompt(),
     };
+    info!("Will push pr? {}", will_push_pr);
     if will_push_pr == true {
-        let _ = branch_utils::push_pr(directory, no_verify, cowboy_mode);
+        info!("Will push pr? {}", will_push_pr);
+        let _ = branch_utils::push_pr(
+            directory,
+            no_verify,
+            ci_mode,
+            github_api_token,
+            git_branch,
+            Some(&commit_message),
+            pr_template,
+            has_gh,
+        )
+        .await
+        .unwrap();
     }
 }

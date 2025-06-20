@@ -16,7 +16,14 @@ use std::{
     str,
 };
 
-pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str, github_api_token: &str) {
+pub fn commit(
+    matches: ArgMatches,
+    git_branch: &str,
+    directory: &str,
+    github_api_token: Option<&str>,
+    _mcp_config: Option<&str>,
+    has_gh: bool,
+) {
     let use_claude = matches.is_present("claude");
     debug!("USE CLAUDE {}, {:?}", use_claude, matches);
     let stdout = io::stdout(); // get the global stdout entity
@@ -27,7 +34,7 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str, github_api
         process::exit(0);
     }
 
-    let cowboy_mode = matches.is_present("cowboy_mode");
+    let ci_mode = matches.is_present("ci_mode");
     let no_verify = matches.is_present("no_verify");
     let stored_pr_template = match storage::get_branch_config(git_branch, directory) {
         Ok(x) => x,
@@ -53,7 +60,6 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str, github_api
     let mut additional_commit_message = vec![];
     match (use_claude, commit_message.is_none()) {
         (true, true) => {
-            println!("use claude");
             writeln!(handle, "Will build a commit message using Claude").unwrap_or_default();
 
             let _ = handle.flush();
@@ -64,9 +70,9 @@ pub fn commit(matches: ArgMatches, git_branch: &str, directory: &str, github_api
                     commit_type: string,
                     commit_labels: string[],
 
-The expected values are the following. commit_message: should be a string under 50 characters that summarizes the main changes to the pr. Do not include the commit type in the commit _message entry
-
-Commit_type as a string choose the best from the following options and return the key:
+The expected values are the following.
+- commit_message: should be a string under 50 characters that summarizes the main changes to the pr. Do not include the commit type in the commit_message entry
+- commit_type as a string choose the best from the following options and return the key:
         "feat: A new feature",
         "fix: Bug feature related or code linting, typecheck, etc fixes",
         "test: Adding missing tests or correcting existing tests",
@@ -76,10 +82,12 @@ Commit_type as a string choose the best from the following options and return th
         "ci: Changes to our CI configuration files and scripts example scopes: Travis, Circle, BrowserStack, SauceLabs",
         "revert: Reverts a previous commit",
 
-                commit_labels: an array of strings; choose all that apply from the web, api or ci; if none match return an empty array
+- commit_labels: an array of strings; choose all that apply from the web, api or ci; if none match return an empty array
                 web: files related to frontend code
                 api: files related to backend code
-                ci: files related to deployments""#,
+                ci: files related to deployments
+Please only analyse code for staged files. Do not include un staged files in the analysis.
+                ""#,
                 &directory
             );
             let bar = ProgressBar::new_spinner();
@@ -92,29 +100,34 @@ Commit_type as a string choose the best from the following options and return th
 
             bar.finish();
 
-            let cmd_arg_status_code = output.status.code();
-            println!(
-                "{:?}\n{:?}\n{:?}",
-                cmd_arg_status_code, output.stdout, output.stderr
-            );
+            let _cmd_arg_status_code = output.status.code();
             let result_stdout_string = str::from_utf8(&output.stdout).unwrap();
-            let result_stderr = str::from_utf8(&output.stderr).unwrap();
-            println!("Result: {:?}\n{:?}", result_stdout_string, result_stderr);
+            let _result_stderr = str::from_utf8(&output.stderr).unwrap();
 
             let result_json = claude::parse_claude_response(result_stdout_string)
                 .ok()
                 .expect("Should return JSON");
-            commit_message = Some(
-                format!(
-                    "{}: {} [{}] #{}",
-                    result_json.get("commit_type").unwrap().as_str().unwrap(),
-                    result_json.get("commit_message").unwrap().as_str().unwrap(),
-                    team_prefix,
-                    issue_id
-                )
-                .to_lowercase(),
-            );
-            println!("Result: {:?}\n{:?}", result_json, commit_message);
+            commit_message = Some(format!(
+                "{}: {} [{}] #{}",
+                result_json
+                    .get("commit_type")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_lowercase(),
+                result_json
+                    .get("commit_message")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_lowercase()
+                    .chars()
+                    .take(50)
+                    .into_iter()
+                    .collect::<String>(),
+                team_prefix,
+                issue_id
+            ));
         }
         _ => {
             let message_name;
@@ -155,7 +168,14 @@ Commit_type as a string choose the best from the following options and return th
                 output_text.push_str(&format!("\x1b[1;31m- No message name found\x1b[0m\n"));
             }
             if is_new_branch == false {
-                let _ = storage::load_branch_config(&git_branch, directory, no_verify, cowboy_mode);
+                let _ = storage::load_branch_config(
+                    &git_branch,
+                    directory,
+                    no_verify,
+                    ci_mode,
+                    github_api_token,
+                    has_gh,
+                );
             }
             info!("Is new branch: {}", &is_new_branch);
             let (proposed_type, used_types) =
@@ -190,7 +210,7 @@ Commit_type as a string choose the best from the following options and return th
                 writeln!(handle, "{}", proposed_ouput_message).unwrap_or_default();
                 let _ = handle.flush();
 
-                if cowboy_mode == true {
+                if ci_mode == true {
                     commit_message = Some(proposed_output_string);
                     will_accept_suggested_message = true;
                 } else {
@@ -218,7 +238,7 @@ Commit_type as a string choose the best from the following options and return th
                 let selected_issue_id = prompts::issue_id_prompt(&issue_id);
                 issue_id = selected_issue_id;
                 let selected_team_prefix = prompts::team_prefix_prompt(&team_prefix);
-                let selected_type = prompts::select_types_prompt(&proposed_type);
+                let selected_type = prompts::select_types_prompt(proposed_type);
                 info!("Selected type: {}", selected_type);
 
                 let _scope_options: Vec<&str> = vec![
@@ -285,7 +305,7 @@ Commit_type as a string choose the best from the following options and return th
     }
 
     let mut build_pr_template = false;
-    if cowboy_mode == true && pr_template.is_none() {
+    if ci_mode == true && pr_template.is_none() {
         build_pr_template = true;
     } else {
         let pr_template_prompt = Confirm::new(&confirm_message)
@@ -321,7 +341,9 @@ Commit_type as a string choose the best from the following options and return th
             &git_branch,
             pr_template,
             no_verify,
-            cowboy_mode,
+            ci_mode,
+            github_api_token,
+            has_gh,
         );
     }
 }

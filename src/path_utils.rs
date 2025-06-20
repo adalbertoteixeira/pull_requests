@@ -10,7 +10,7 @@ pub fn top_level(directory: &str) {
     if !repo_root_output.status.success() {
         let error = str::from_utf8(&repo_root_output.stderr).unwrap();
         error!("{:?}", error);
-        println!("Path is not valid");
+        debug!("Path is not valid");
         process::exit(1)
     }
 }
@@ -22,7 +22,7 @@ pub fn git_branch(directory: &str) -> String {
     if !output.status.success() {
         let error = str::from_utf8(&output.stderr).unwrap();
         error!("{:?}", error);
-        println!("Couldn't get the branch.");
+        debug!("Couldn't get the branch.");
         process::exit(1)
     }
     let current_branch = str::from_utf8(&output.stdout).unwrap().trim();

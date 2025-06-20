@@ -109,7 +109,7 @@ pub fn team_prefix_prompt(team_prefix: &str) -> String {
     return selected_team_prefix;
 }
 
-pub fn select_types_prompt(proposed_type: &Option<String>) -> String {
+pub fn select_types_prompt(proposed_type: Option<String>) -> String {
     let type_options: Vec<&str> = vec![
         "feat: A new feature",
         "fix: Bug (feature related) or code (linting, typecheck, etc) fixes",
@@ -303,12 +303,9 @@ pub fn pr_template_prompt(issue_id: &str, use_claude: bool, directory: &str) -> 
             }
             let result: serde_json::Value =
                 serde_json::from_str(str::from_utf8(&output.stdout).unwrap()).unwrap();
-            println!("Result: {:?}\n", result);
             let result_json = result.get("result").unwrap();
-            println!("Result JSON: {:?}\n", result_json);
 
             let result_json_str = result_json.as_str().unwrap();
-            println!("Result JSON: {:?}\n", result_json);
             let mut start_bytes = result_json_str.find("```json\n").unwrap();
             start_bytes += 7;
             let end_bytes = result_json_str.rfind("```").unwrap();
@@ -316,12 +313,6 @@ pub fn pr_template_prompt(issue_id: &str, use_claude: bool, directory: &str) -> 
             let result_sjon = &result_json_str[start_bytes..end_bytes];
             let result_sjon_replace = result_sjon.replace("\n", "");
             let final_json: serde_json::Value = serde_json::from_str(&result_sjon_replace).unwrap();
-            println!(
-                "search:{:?}, {:?}, \n{:?}",
-                result_sjon_replace,
-                final_json,
-                final_json.get("pr_description")
-            );
             pr_description_string = Some(
                 final_json
                     .get("pr_description")

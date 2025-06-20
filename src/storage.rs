@@ -207,7 +207,14 @@ pub fn get_branch_config(
     Ok(None)
 }
 
-pub fn load_branch_config(git_branch: &str, directory: &str, no_verify: bool, cowboy_mode: bool) {
+pub fn load_branch_config(
+    git_branch: &str,
+    directory: &str,
+    no_verify: bool,
+    ci_mode: bool,
+    github_api_token: Option<&str>,
+    has_gh: bool,
+) {
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
     let path = Path::new(directory).join(".commit_message");
@@ -243,7 +250,9 @@ pub fn load_branch_config(git_branch: &str, directory: &str, no_verify: bool, co
                 git_branch,
                 Some(previous_pr_template),
                 no_verify,
-                cowboy_mode,
+                ci_mode,
+                github_api_token,
+                has_gh,
             );
             process::exit(0);
         }

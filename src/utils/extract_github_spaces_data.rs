@@ -4,6 +4,7 @@ use log::{debug, info};
 use reqwest::Client;
 use serde_json::json;
 use std::{
+    collections::HashMap,
     io::{self, Write},
     process,
     time::Duration,
@@ -21,13 +22,46 @@ pub struct GithubSpaceData {
     pub spaces: Vec<GithubSpace>,
 }
 
+pub async fn make_github_post(
+    client: &Client,
+    url: &str,
+    github_api_token: Option<&str>,
+    body: HashMap<&str, &str>,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let mut authorization: String = "Bearer ".to_owned();
+    authorization.push_str(github_api_token.expect("Github API key should be provided."));
+
+    let bar = ProgressBar::new_spinner();
+    bar.enable_steady_tick(Duration::from_millis(100));
+    let res = client
+        .post(url)
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("Authorization", authorization)
+        .header("User-Agent", "pull_requests")
+        .json(&body)
+        .send()
+        .await?;
+
+    bar.finish();
+    let status = res.status();
+    info!("Status: {}", status);
+
+    if !status.is_success() {
+        let error_body = res.text().await?;
+        return Err(format!("API request failed with status {}: {}", status, error_body).into());
+    }
+
+    let body: serde_json::Value = res.json().await?;
+    Ok(body)
+}
 pub async fn make_github_request(
     client: &Client,
     url: &str,
-    github_api_token: &str,
+    github_api_token: Option<&str>,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let mut authorization: String = "Bearer ".to_owned();
-    authorization.push_str(github_api_token);
+    authorization.push_str(github_api_token.expect("Github API key should be provided."));
 
     let bar = ProgressBar::new_spinner();
     bar.enable_steady_tick(Duration::from_millis(100));
@@ -56,7 +90,7 @@ pub async fn make_github_request(
 pub async fn extract_github_spaces_data(
     directory: &str,
     client: &Client,
-    github_api_token: &str,
+    github_api_token: Option<&str>,
 ) -> Result<Option<Vec<GithubSpace>>, String> {
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
@@ -116,7 +150,7 @@ pub async fn extract_github_spaces_data(
 
 pub async fn get_github_user_issues(
     client: &Client,
-    github_api_token: &str,
+    github_api_token: Option<&str>,
 ) -> Result<Vec<GithubIssue>, Box<dyn std::error::Error>> {
     let url = "https://api.github.com/issues?pulls=false";
 

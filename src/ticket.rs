@@ -2,27 +2,23 @@ use std::{
     fs,
     io::{self, Write},
     path::Path,
-    process::{self, Command, Stdio},
-    time::Duration,
+    process::{self},
 };
 
 use clap::ArgMatches;
-use indicatif::ProgressBar;
 use inquire::{Select, Text};
 use log::{debug, info};
 use reqwest::Client;
 
 use crate::{
     storage::{
-        BranchYamlConfig, get_branch_config, load_branch_config, load_clickup_config,
-        load_github_config, save_branch_config,
+        BranchYamlConfig, get_branch_config, load_clickup_config, load_github_config,
+        save_branch_config,
     },
     utils::{
-        claude,
+        claude::{prompt_claude, prompt_claude_one_off},
         extract_clickup_spaces_data::{extract_clickup_spaces_data, make_clickup_request},
-        extract_github_spaces_data::{
-            GithubIssue, extract_github_spaces_data, get_github_user_issues,
-        },
+        extract_github_spaces_data::{extract_github_spaces_data, get_github_user_issues},
     },
 };
 
@@ -33,13 +29,13 @@ pub enum IssueManagementTool {
 }
 
 fn define_issue_management_tool(
-    github_api_token: &str,
+    github_api_token: Option<&str>,
     clickup_api_key: Option<&str>,
 ) -> IssueManagementTool {
     let stdout = io::stdout();
     let mut handle = io::BufWriter::new(&stdout);
 
-    let has_github = !github_api_token.is_empty();
+    let has_github = !github_api_token.is_some_and(|x| x.len() > 0);
     let has_clickup = clickup_api_key.is_some() && !clickup_api_key.unwrap().is_empty();
 
     match (has_github, has_clickup) {
@@ -82,6 +78,7 @@ async fn automation_from_issue_id(
     issue_id: &str,
     client: &Client,
     clickup_api_key: &str,
+    mcp_config: Option<&str>,
 ) {
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
@@ -194,7 +191,7 @@ async fn automation_from_issue_id(
         let prompt_text = &issue_description.clone().unwrap();
 
         let claude_suggestion_prompt_result =
-            prompt_claude_one_off(&prompt_header, &prompt_text, directory)
+            prompt_claude_one_off(&prompt_header, &prompt_text, directory, mcp_config)
                 .expect("should get Claude response");
         claude_suggestion = Some(claude_suggestion_prompt_result.clone());
         debug!("Getting suggestion {:?}", claude_suggestion);
@@ -219,7 +216,7 @@ async fn automation_from_issue_id(
         &prompt_issue_description, &prompt_claude_suggestion
     );
 
-    let _ = prompt_claude(&prompt_text, directory);
+    let _ = prompt_claude(&prompt_text, directory, mcp_config);
 }
 
 fn create_git_branch(issue_id: &str, issue_name: &str) -> String {
@@ -235,84 +232,13 @@ fn create_git_branch(issue_id: &str, issue_name: &str) -> String {
     format!("{}-{}", issue_id, parsed_name)
 }
 
-fn prompt_claude_one_off(
-    prompt_header: &str,
-    prompt_text: &str,
+pub async fn ticket(
+    matches: ArgMatches<'static>,
     directory: &str,
-) -> Result<String, io::Error> {
-    let stdout = io::stdout();
-    let mut handle = io::BufWriter::new(&stdout);
-    let bar = ProgressBar::new_spinner();
-    bar.enable_steady_tick(Duration::from_millis(100));
-
-    let initial_prompt = format!(r#"{}"#, prompt_text).replace("'", "\'");
-
-    // Save prompt to system tmp file
-    let tmp_file_path = format!("/tmp/claude_prompt_{}.txt", std::process::id());
-    fs::write(&tmp_file_path, &initial_prompt).expect("Failed to write prompt to tmp file");
-
-    let cmd_arg = format!(
-        r#"cd {} &&  cat {} | claude --model sonnet --output-format json  -p {}"#,
-        &directory, tmp_file_path, prompt_header
-    );
-
-    println!("{:?}", cmd_arg);
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg(cmd_arg)
-        .output()
-        .expect("Failed to run  process");
-
-    bar.finish();
-    if !output.status.success() {
-        let error = str::from_utf8(&output.stderr).unwrap_or_default();
-        let message = str::from_utf8(&output.stdout).unwrap_or_default();
-        writeln!(
-            handle,
-            "There was an issue: \x1b[1;31m{} {}\x1b[1;0m",
-            error, message
-        )
-        .unwrap_or_default();
-        let _ = handle.flush();
-        process::exit(1)
-    }
-
-    let result_stdout_string = str::from_utf8(&output.stdout).unwrap();
-
-    let result_json: serde_json::Value = serde_json::from_str(&result_stdout_string).unwrap();
-    let result = result_json.get("result").unwrap().as_str().unwrap();
-
-    info!("done");
-    Ok(result.to_string())
-}
-
-fn prompt_claude(prompt_text: &str, directory: &str) {
-    let stdout = io::stdout();
-    let mut handle = io::BufWriter::new(&stdout);
-
-    // Spawn an interactive shell
-    let mut child = Command::new("claude")
-        .arg(prompt_text)
-        .current_dir(&directory)
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Failed to spawn interactive shell");
-
-    // Wait for the shell to exit
-    let status = child.wait().expect("Failed to wait for shell");
-    info!("Shell exited with status: {:?}", status);
-    writeln!(
-        handle,
-        "{}",
-        "Work is done. We are working to implement the next automations in the future."
-    )
-    .unwrap_or_default();
-    let _ = handle.flush();
-}
-
-pub async fn ticket(matches: ArgMatches<'static>, directory: &str, github_api_token: &str) {
+    github_api_token: Option<&str>,
+    mcp_config: Option<&str>,
+    _has_gh: bool,
+) {
     info!("Ticket command");
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
@@ -374,7 +300,7 @@ pub async fn ticket(matches: ArgMatches<'static>, directory: &str, github_api_to
                                         &selected_issue.body
                                     );
 
-                                    let _ = prompt_claude(&prompt_text, directory);
+                                    let _ = prompt_claude(&prompt_text, directory, mcp_config);
                                 }
                                 Err(_) => {
                                     writeln!(handle, "Selection cancelled").unwrap_or_default();
@@ -426,7 +352,7 @@ pub async fn ticket(matches: ArgMatches<'static>, directory: &str, github_api_to
                                     &task_description.as_str().unwrap()
                                 );
 
-                                let _ = prompt_claude(&prompt_text, directory);
+                                let _ = prompt_claude(&prompt_text, directory, mcp_config);
                             }
                             None => {
                                 writeln!(handle, "{}", "Error fetching task for clickup")
@@ -439,8 +365,13 @@ pub async fn ticket(matches: ArgMatches<'static>, directory: &str, github_api_to
                     }
                     let _ = handle.flush();
 
-                    let _ =
-                        automation_from_issue_id(directory, &issue_id, &client, &clickup_api_key);
+                    let _ = automation_from_issue_id(
+                        directory,
+                        &issue_id,
+                        &client,
+                        &clickup_api_key,
+                        mcp_config,
+                    );
                 }
             }
         }
@@ -470,7 +401,14 @@ pub async fn ticket(matches: ArgMatches<'static>, directory: &str, github_api_to
                 process::exit(1);
             }
 
-            let _ = automation_from_issue_id(directory, issue_id, &client, &clickup_api_key).await;
+            let _ = automation_from_issue_id(
+                directory,
+                issue_id,
+                &client,
+                &clickup_api_key,
+                mcp_config,
+            )
+            .await;
         }
         _ => {}
     }
