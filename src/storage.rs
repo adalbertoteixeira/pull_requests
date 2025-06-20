@@ -213,6 +213,7 @@ pub fn load_branch_config(
     no_verify: bool,
     ci_mode: bool,
     github_api_token: Option<&str>,
+    has_gh: bool,
 ) {
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
@@ -251,6 +252,7 @@ pub fn load_branch_config(
                 no_verify,
                 ci_mode,
                 github_api_token,
+                has_gh,
             );
             process::exit(0);
         }

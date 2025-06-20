@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::{
     io::{self, Write},
-    process::{self, Command},
+    process::{self, Command, Stdio},
     str,
 };
 
@@ -249,6 +249,8 @@ pub fn commit_pr(
     let output = Command::new("sh")
         .arg("-c")
         .arg(cmd_arg)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
         .output()
         .expect("Failed to run  process");
 
@@ -342,7 +344,10 @@ pub async fn push_pr(
                     bar.enable_steady_tick(Duration::from_millis(100));
                     if response {
                         // Check if current branch exists on remote
-                        let branch_cmd = format!("cd {} && git ls-remote --heads origin {}", directory, git_branch);
+                        let branch_cmd = format!(
+                            "cd {} && git ls-remote --heads origin {}",
+                            directory, git_branch
+                        );
                         let branch_output = Command::new("sh")
                             .arg("-c")
                             .arg(branch_cmd)
@@ -438,26 +443,32 @@ pub async fn push_pr(
         info!("Parts: {:?}", parts);
         // process::exit(1);
         let pr_exists = check_existing_pr(directory);
+        info!("Pr exists?: {}", pr_exists);
 
         if pr_exists {
-            info!("\n\nExisting PR found");
+            info!("Existing PR found");
+            let stdout = io::stdout(); // get the global stdout entity
+            let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
+            writeln!(handle, "The PR for this branch already exists").unwrap_or_default();
+            let _ = handle.flush();
+            return Some(0);
         }
         info!("No pr created\nCommit message: {:?}", commit_message);
-        // if there's no pr, create it
-        //
-        create_pr(
-            directory,
-            github_api_token,
-            git_branch,
-            commit_message,
-            pr_template,
-            &parts.unwrap().owner.unwrap(),
+        let create_pr_prompt = Confirm::new(
+            "The branch was pushed but there is no PR created. Do you want to create it?",
         )
-        .await
-        .expect("PR should be created");
-        // when there's a pr:
-        // - update assignee
-        // - ask to push template
+        .with_default(true)
+        .prompt();
+
+        match create_pr_prompt {
+            Ok(response) => {
+                if response {
+                    create_pr(directory, commit_message, pr_template)
+                        .expect("PR should be created");
+                }
+            }
+            Err(_) => {}
+        }
     }
 
     cmd_arg_status_code
@@ -509,60 +520,55 @@ pub fn get_branch_origin_parts(directory: &str) -> Result<GithubRepoParts, io::E
     Ok(repo_parts)
 }
 
-pub async fn create_pr(
+pub fn create_pr(
     directory: &str,
-    github_api_token: Option<&str>,
-    git_branch: &str,
     commit_message: Option<&str>,
     pr_template: Option<String>,
-    owner: &str,
-) -> Result<Option<serde_json::Value>, Box<dyn std::error::Error>> {
-    if github_api_token.is_none_or(|x| x.len() == 0) {
-        return Ok(None);
-    }
-
-    let repo_parts = get_branch_origin_parts(directory).expect("should have a response");
-    if repo_parts.owner_and_path.is_none() {
-        return Ok(None);
-    }
-    let owner_and_path = repo_parts.owner_and_path.unwrap();
-    let client = Client::new();
-    let url = format!("https://api.github.com/repos/{}/pulls", owner_and_path);
-    let mut body = HashMap::new();
-    body.insert(
-        "title",
-        commit_message.expect("commit message should be set"),
-    );
-    body.insert("head", "main");
-    let pr_body = match pr_template.is_some() {
-        true => pr_template.to_owned().unwrap(),
-        false => "".to_owned(),
+) -> Result<Option<i32>, io::Error> {
+    let pr_body = match pr_template {
+        Some(template) => template,
+        None => "".to_owned(),
     };
-    body.insert("body", &pr_body);
-    let head = &format!("{}:{}", owner, git_branch).to_owned();
-    body.insert("head", head);
-    info!("pull url {:?}", url);
-    match make_github_post(&client, &url, github_api_token, body).await {
-        Ok(response) => {
-            if let Some(prs) = response.as_array() {
-                if !prs.is_empty() {
-                    // Return the first PR found
-                    return Ok(Some(prs[0].clone()));
-                }
-            }
-            Ok(None)
-        }
-        Err(_) => Ok(None),
-    }
+
+    let title = commit_message.unwrap_or("Default PR Title");
+
+    let cmd_arg = format!(
+        r#"cd {} && gh pr create -a @me --body "{}" --dry-run -t "{}""#,
+        directory, pr_body, title
+    );
+
+    info!("Executing command: {}", cmd_arg);
+    let output = Command::new("sh").arg("-c").arg(cmd_arg).output()?;
+
+    io::stderr().write_all(&output.stderr).unwrap();
+    io::stdout().write_all(&output.stdout).unwrap();
+
+    Ok(output.status.code())
 }
 pub fn check_existing_pr(directory: &str) -> bool {
+    info!("Checking for existing PR");
     let cmd_arg = format!("cd {} && gh pr view", directory);
-    let output = Command::new("sh").arg("-c").arg(cmd_arg).output();
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(cmd_arg)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .output();
 
     match output {
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            if stderr.contains("no git remotes found") {
+            if stderr.len() > 0 {
+                let stdout = io::stdout(); // get the global stdout entity
+                let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
+                writeln!(handle, "There was an error searching for the existing PR.")
+                    .unwrap_or_default();
+                let _ = handle.flush();
+                process::exit(1);
+            }
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if stdout.contains("no pull requests found") {
                 return false;
             }
             match output.status.code() {

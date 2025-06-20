@@ -7,7 +7,7 @@ use log::{debug, info};
 
 use crate::{branch_utils, prompts};
 
-pub fn commit_and_push(
+pub async fn commit_and_push(
     directory: &str,
     commit_message: String,
     commit_message_additional_messages: Vec<String>,
@@ -68,6 +68,8 @@ pub fn commit_and_push(
             Some(&commit_message),
             pr_template,
             has_gh,
-        );
+        )
+        .await
+        .unwrap();
     }
 }

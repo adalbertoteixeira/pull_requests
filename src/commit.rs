@@ -100,9 +100,9 @@ Please only analyse code for staged files. Do not include un staged files in the
 
             bar.finish();
 
-            let cmd_arg_status_code = output.status.code();
+            let _cmd_arg_status_code = output.status.code();
             let result_stdout_string = str::from_utf8(&output.stdout).unwrap();
-            let result_stderr = str::from_utf8(&output.stderr).unwrap();
+            let _result_stderr = str::from_utf8(&output.stderr).unwrap();
 
             let result_json = claude::parse_claude_response(result_stdout_string)
                 .ok()
@@ -174,6 +174,7 @@ Please only analyse code for staged files. Do not include un staged files in the
                     no_verify,
                     ci_mode,
                     github_api_token,
+                    has_gh,
                 );
             }
             info!("Is new branch: {}", &is_new_branch);
