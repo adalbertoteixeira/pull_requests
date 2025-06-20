@@ -26,6 +26,20 @@ pub fn build_matches() -> ArgMatches<'static> {
                 .takes_value(true)
                 .help("A Github fine grained personal access token. See https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token \n You might require organization approval before being able to use it."),
         )
+            .arg(Arg::with_name("mcp_config").long("mcp-config").help("string with the path to the mcp config, if available").takes_value(true).global(true))
+                .arg(
+                    Arg::with_name("ci_mode")
+                        .long("ci-mode")
+                        .help("Auto accept most prompts, except potentially destructive ones.")
+                        .takes_value(false).global(true),
+                )
+                .arg(
+                    Arg::with_name("no_verify")
+                        .short("n")
+                        .long("no-verify")
+                        .help("Skip git pre-commit and pre-push hooks")
+                        .takes_value(false).global(true),
+                )
         .subcommands(vec![
             SubCommand::with_name("ticket")
                 .arg(
@@ -62,20 +76,6 @@ This data is used to run searches against the services."),
                         .long("push-branch")
                         .value_name("push-branch")
                         .help("Push the branch to the origin")
-                        .takes_value(false),
-                )
-                .arg(
-                    Arg::with_name("cowboy_mode")
-                        .long("cowboy-mode")
-                        .short("c")
-                        .help("Auto accept most prompts, except potentially destructive ones.")
-                        .takes_value(false),
-                )
-                .arg(
-                    Arg::with_name("no_verify")
-                        .short("n")
-                        .long("no-verify")
-                        .help("Skip git pre-commit and pre-push hooks")
                         .takes_value(false),
                 ),
             SubCommand::with_name("commit")
@@ -124,20 +124,6 @@ This data is used to run searches against the services."),
                         .help("Show PR template")
                         .takes_value(false),
                 )
-                .arg(
-                    Arg::with_name("cowboy_mode")
-                        .long("cowboy-mode")
-                        .short("c")
-                        .help("Auto accept most prompts, except potentially destructive ones.")
-                        .takes_value(false),
-                )
-                .arg(
-                    Arg::with_name("no_verify")
-                        .short("n")
-                        .long("no-verify")
-                        .help("Skip git pre-commit and pre-push hooks")
-                        .takes_value(false),
-                ),
         ])
         .get_matches()
 }
