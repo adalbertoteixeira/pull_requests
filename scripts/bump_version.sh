@@ -10,6 +10,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
+# @TODO: don't run anything if there are staged file, unstaged files or unpushed commits
 # Validate parameter
 BUMP_TYPE=$1
 if [[ ! "$BUMP_TYPE" =~ ^(major|minor|patch)$ ]]; then
@@ -89,10 +90,17 @@ sed -i -E "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" "$PACKAGE_JSON"
 echo "Version bump complete!"
 echo "Updated to version $NEW_VERSION in both Cargo.toml and package.json"
 
+echo "Staging changed files"
+git add package.json
+git add Cargo.toml
+git add Cargo.lock
+
+echo "Commiting staged files"
+git commit -m "bump version"
+
 # Create git tag
 echo "Creating git tag v$NEW_VERSION..."
 git tag -a "v$NEW_VERSION" -m "version v$NEW_VERSION"
-
 if [ $? -eq 0 ]; then
     echo "Git tag v$NEW_VERSION created successfully"
     
