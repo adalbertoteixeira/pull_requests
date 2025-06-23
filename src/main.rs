@@ -8,12 +8,6 @@ pub mod path_utils;
 pub mod storage;
 pub mod utils;
 pub mod ux_utils;
-
-use std::{
-    io::{self, Write},
-    process,
-};
-
 use branch_utils::validate_branch;
 use gh::validate_gh;
 use log::{debug, info};
@@ -25,8 +19,6 @@ extern crate log;
 async fn main() {
     env_logger::init();
 
-    let stdout = io::stdout(); // get the global stdout entity
-    let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
     let matches = matches::build_matches();
 
     let config_directory_matches = matches.value_of("config_directory").unwrap_or("");
@@ -51,10 +43,10 @@ async fn main() {
 
     if let Some(_) = matches.subcommand_matches("push") {
         validate_branch(&git_branch);
-        let branch_config = get_branch_config(&git_branch, directory).expect("Should load config");
+        let branch_config = get_branch_config(&git_branch, &directory).expect("Should load config");
         let branch_config_parts = branch_config.unwrap();
         branch_utils::push_pr(
-            directory,
+            &directory,
             no_verify,
             ci_mode,
             github_api_token,
@@ -75,7 +67,8 @@ async fn main() {
             github_api_token,
             mcp_config,
             has_gh,
-        );
+        )
+        .await;
     }
 
     if let Some(_) = matches.subcommand_matches("ticket") {

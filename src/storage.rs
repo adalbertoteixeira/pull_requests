@@ -207,7 +207,7 @@ pub fn get_branch_config(
     Ok(None)
 }
 
-pub fn load_branch_config(
+pub async fn load_branch_config(
     git_branch: &str,
     directory: &str,
     no_verify: bool,
@@ -253,7 +253,8 @@ pub fn load_branch_config(
                 ci_mode,
                 github_api_token,
                 has_gh,
-            );
+            )
+            .await;
             process::exit(0);
         }
     }

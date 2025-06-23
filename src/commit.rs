@@ -16,8 +16,8 @@ use std::{
     str,
 };
 
-pub fn commit(
-    matches: ArgMatches,
+pub async fn commit(
+    matches: ArgMatches<'static>,
     git_branch: &str,
     directory: &str,
     github_api_token: Option<&str>,
@@ -344,6 +344,7 @@ Please only analyse code for staged files. Do not include un staged files in the
             ci_mode,
             github_api_token,
             has_gh,
-        );
+        )
+        .await;
     }
 }

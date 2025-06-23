@@ -13,8 +13,6 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 use crate::storage;
-use crate::utils::extract_github_spaces_data::{make_github_post, make_github_request};
-use reqwest::Client;
 
 #[derive(Debug)]
 pub struct GithubRepoParts {
@@ -281,7 +279,7 @@ pub async fn push_pr(
     directory: &str,
     no_verify: bool,
     ci_mode: bool,
-    github_api_token: Option<&str>,
+    _github_api_token: Option<&str>,
     git_branch: &str,
     commit_message: Option<&str>,
     pr_template: Option<String>,
