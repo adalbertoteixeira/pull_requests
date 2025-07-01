@@ -5,6 +5,7 @@ pub mod commit;
 pub mod gh;
 pub mod matches;
 pub mod path_utils;
+pub mod progress;
 pub mod storage;
 pub mod utils;
 pub mod ux_utils;
@@ -80,5 +81,9 @@ async fn main() {
             has_gh,
         )
         .await;
+    }
+
+    if let Some(_) = matches.subcommand_matches("progress") {
+        progress::progress(matches.subcommand_matches("progress").unwrap().clone()).await;
     }
 }

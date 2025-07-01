@@ -123,6 +123,16 @@ This data is used to run searches against the services."),
                         .value_name("show-pr-template")
                         .help("Show PR template")
                         .takes_value(false),
+                ),
+            SubCommand::with_name("progress")
+                .after_help("Will require setting the pager to cat: `gh config set pager cat`")
+                .arg(
+                    Arg::with_name("projects")
+                        .long("projects")
+                        .env("PULL_REQUESTS_PROGRESS_PROJECTS")
+                        .help("Comma-separated list of projects to check for progress")
+                        .takes_value(true)
+                        .default_value("1,2,3"),
                 )
         ])
         .get_matches()
