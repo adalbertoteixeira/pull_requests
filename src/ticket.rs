@@ -9,12 +9,14 @@ use clap::ArgMatches;
 use inquire::{Select, Text};
 use log::{debug, info};
 use reqwest::Client;
+use serde_json;
 
 use crate::{
     storage::{
         BranchYamlConfig, get_branch_config, load_clickup_config, load_github_config,
         save_branch_config,
     },
+    types::github_types::GithubIssue,
     utils::{
         claude::{prompt_claude, prompt_claude_one_off},
         extract_clickup_spaces_data::{extract_clickup_spaces_data, make_clickup_request},
@@ -133,39 +135,53 @@ async fn automation_from_issue_id(
             git_branch = Some(branch_data.branch_name);
         }
         false => {
-            let url = format!(
-                "https://api.clickup.com/api/v2/task/{}?include_markdown_description=true",
-                issue_id
-            );
+            let cmd_arg = format!(
+                "cd {directory} && gh issue view {issue_id} --json assignees,author,body,closed,closedAt,closedByPullRequestsReferences,comments,createdAt,id,isPinned,labels,milestone,number,projectCards,reactionGroups,state,stateReason,title,updatedAt,url",
+            ).to_owned();
+            debug!("cmd arg {}", cmd_arg);
+            let gh_output = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd_arg)
+                .output();
 
-            let body = match make_clickup_request(&client, &url, clickup_api_key).await {
-                Ok(b) => b,
-                Err(e) => {
-                    writeln!(handle, "Error fetching issue: {}", e).unwrap_or_default();
+            debug!("{:?}", gh_output);
+            match gh_output {
+                Ok(output) => {
+                    if output.status.success() {
+                        let stdout = String::from_utf8_lossy(&output.stdout);
+                        debug!("GitHub issue data: {}", stdout);
+
+                        // Parse the JSON response into GithubIssue struct
+                        match serde_json::from_str::<GithubIssue>(&stdout) {
+                            Ok(github_issue) => {
+                                // Extract description from body
+                                issue_description = github_issue.body.clone();
+
+                                // Extract title as name
+                                issue_name = github_issue.title.clone();
+                            }
+                            Err(e) => {
+                                debug!("Failed to parse GitHub issue JSON: {}", e);
+                            }
+                        }
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        writeln!(handle, "{}", stderr).unwrap_or_default();
+                        let _ = handle.flush();
+                        process::exit(1);
+                    }
+                }
+                Err(_) => {
+                    writeln!(handle, "{}", "Couldn't get the issue").unwrap_or_default();
                     let _ = handle.flush();
                     process::exit(1);
                 }
-            };
-
-            // Extract and output the description
-            if let Some(description) = body.get("markdown_description") {
-                issue_description = Some(description.as_str().unwrap_or("N/A").to_string());
-            } else if let Some(description) = body.get("description") {
-                issue_description = Some(description.as_str().unwrap_or("N/A").to_string());
             }
 
-            // Also output other useful information
-            if let Some(name) = body.get("name") {
-                issue_name = Some(name.as_str().unwrap_or("N/A").to_string());
-            }
-
-            if let Some(status) = body.get("status") {
-                if let Some(status_name) = status.get("status") {
-                    writeln!(handle, "Status: {}", status_name.as_str().unwrap_or("N/A"))
-                        .unwrap_or_default();
-                }
-            }
-
+            println!(
+                "{:?}, {:?}, {:?}",
+                issue_description, issue_name, git_branch
+            );
             let _ = handle.flush();
             let name_clone = issue_name.clone().unwrap();
             let built_git_branch = create_git_branch(issue_id, &name_clone);
@@ -187,7 +203,8 @@ async fn automation_from_issue_id(
     }
 
     if claude_suggestion.is_none() {
-        let prompt_header = "Given the following issue description, define the best approach to implement these changes. Write the output outlining all the files the developer might need to look into, suggesting the best viable path to implement the changes. Output the result starting with: \"Our suggestion to implement the needed changes is the following\"";
+        let prompt_header = "You are a technical product manager.\nGiven the following  GitHub issue text, extend the issue to support the developer implementing it.\n\nAdd whatever could be useful:\n- debug steps;\n- file paths to potentially look into;\n- helpful notes to keep in mind;\n- whatever might be helpful context.\n\n\n\n
+\"";
         let prompt_text = &issue_description.clone().unwrap();
 
         let claude_suggestion_prompt_result =

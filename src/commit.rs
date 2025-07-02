@@ -58,38 +58,39 @@ pub async fn commit(
     let team_prefix = "INF";
 
     let mut additional_commit_message = vec![];
+    info!(
+        "use_claude: {}, commit_message {:?}",
+        use_claude, commit_message
+    );
     match (use_claude, commit_message.is_none()) {
         (true, true) => {
             writeln!(handle, "Will build a commit message using Claude").unwrap_or_default();
 
             let _ = handle.flush();
 
-            let cmd_arg = format!(
-                r#"cd {} && claude --model sonnet --output-format json  -p "We have done several changes to this repository that we are going to commit. Please analyze the staged files and return a json object with the following structure:
-                    commit_message: string,
-                    commit_type: string,
-                    commit_labels: string[],
+            let git_diff = Command::new("git")
+                .arg("--no-pager")
+                .arg("diff")
+                .arg("--cached")
+                .current_dir(directory)
+                .output()
+                .expect("Failed to run git diff");
 
+            let git_diff_stdout_string = str::from_utf8(&git_diff.stdout).unwrap();
+            info!("Git diff: {:?}", git_diff_stdout_string);
+
+            let cmd_arg = format!(
+                r#"cd {} && claude --model sonnet -p "We have done several changes to this repository. You are a technical writer in charge of documenting the changes and writing the changes to a document.
+The changes are the following: {}
+Please analyze this info and return a json object with the following structure: commit_message: string, commit_type: string, commit_labels: string[],
 The expected values are the following.
 - commit_message: should be a string under 50 characters that summarizes the main changes to the pr. Do not include the commit type in the commit_message entry
-- commit_type as a string choose the best from the following options and return the key:
-        "feat: A new feature",
-        "fix: Bug feature related or code linting, typecheck, etc fixes",
-        "test: Adding missing tests or correcting existing tests",
-        "refactor: A code change that improves performance or code quality",
-        "docs: Documentation only changes",
-        "build: Changes that affect the build system or external dependencies example scopes: gulp, broccoli, npm",
-        "ci: Changes to our CI configuration files and scripts example scopes: Travis, Circle, BrowserStack, SauceLabs",
-        "revert: Reverts a previous commit",
-
-- commit_labels: an array of strings; choose all that apply from the web, api or ci; if none match return an empty array
-                web: files related to frontend code
-                api: files related to backend code
-                ci: files related to deployments
-Please only analyse code for staged files. Do not include un staged files in the analysis.
-                ""#,
-                &directory
+- commit_type as a string choose the best from the following options and return the key: "feat: A new feature", "fix: Bug feature related or code linting, typecheck, etc fixes", "test: Adding missing tests or correcting existing tests", "refactor: A code change that improves performance or code quality", "docs: Documentation only changes", "build: Changes that affect the build system or external dependencies example scopes: gulp, broccoli, npm", "ci: Changes to our CI configuration files and scripts example scopes: Travis, Circle, BrowserStack, SauceLabs", "revert: Reverts a previous commit",
+- commit_labels: an array of strings; choose all that apply from the web, api or ci; if none match return an empty array - web: files related to frontend code - api: files related to backend code - ci: files related to deployments.
+Only output the result, do not commit the message" --output-format json"#,
+                &directory, &git_diff_stdout_string
             );
+            info!("Claude command: {:?}", cmd_arg);
             let bar = ProgressBar::new_spinner();
             bar.enable_steady_tick(Duration::from_millis(100));
             let output = Command::new("sh")
@@ -102,7 +103,9 @@ Please only analyse code for staged files. Do not include un staged files in the
 
             let _cmd_arg_status_code = output.status.code();
             let result_stdout_string = str::from_utf8(&output.stdout).unwrap();
-            let _result_stderr = str::from_utf8(&output.stderr).unwrap();
+            let result_stderr = str::from_utf8(&output.stderr).unwrap();
+            info!("Claude response for commit out: {:?}", result_stdout_string);
+            info!("Claude response for commit err: {:?}", result_stderr);
 
             let result_json = claude::parse_claude_response(result_stdout_string)
                 .ok()
@@ -326,7 +329,10 @@ Please only analyse code for staged files. Do not include un staged files in the
 
     if build_pr_template {
         pr_template = Some(prompts::pr_template_prompt(
-            &issue_id, use_claude, &directory,
+            &issue_id,
+            use_claude,
+            &directory,
+            &git_branch,
         ));
     }
     info!("Will ask for commit");

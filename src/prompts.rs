@@ -243,7 +243,12 @@ pub fn push_pr_prompt() -> bool {
     return answer;
 }
 
-pub fn pr_template_prompt(issue_id: &str, use_claude: bool, directory: &str) -> String {
+pub fn pr_template_prompt(
+    issue_id: &str,
+    use_claude: bool,
+    directory: &str,
+    git_branch: &str,
+) -> String {
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout);
 
@@ -270,10 +275,22 @@ pub fn pr_template_prompt(issue_id: &str, use_claude: bool, directory: &str) -> 
             )
             .unwrap_or_default();
             let _ = handle.flush();
+
+            let git_diff = Command::new("git")
+                .arg("diff")
+                .arg(format!("main..{}", git_branch))
+                .current_dir(directory)
+                .output()
+                .expect("Failed to run git diff");
+
+            info!("Git diff: {:?}", git_diff);
+
             let bar = ProgressBar::new_spinner();
             bar.enable_steady_tick(Duration::from_millis(100));
             let cmd_arg = format!(
-                r#"cd {} && claude --model sonnet -p "We have done several changes to this repository. Please compare the repository against the main branch and write and return the a json object with the following structure:
+                r#"cd {} && claude --model sonnet -p "We have done several changes to this repository, as seen in these changes we got by running git diff:
+                {:?}
+                Please compare the repository against the main branch and write and return the a json object with the following structure:
 
                     pr_description: string,
                     pr_risk_factor: string,
@@ -287,7 +304,7 @@ pub fn pr_template_prompt(issue_id: &str, use_claude: bool, directory: &str) -> 
                 pr_test_steps: describe how to manually test this PR and what we should be aware of; ideally mention commands to run, curl requests, etc,
                 pr_scopes: an array of options from web  api  ci; select all applicable based on the cahnges: were they done to the backend code, the frontend code or the deployment process.
                 " --output-format json "#,
-                &directory
+                &directory, &git_diff
             );
 
             let output = Command::new("sh")

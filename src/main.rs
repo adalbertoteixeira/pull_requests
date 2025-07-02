@@ -7,6 +7,7 @@ pub mod matches;
 pub mod path_utils;
 pub mod progress;
 pub mod storage;
+pub mod types;
 pub mod utils;
 pub mod ux_utils;
 use branch_utils::validate_branch;

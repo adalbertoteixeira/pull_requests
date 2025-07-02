@@ -531,7 +531,7 @@ pub fn create_pr(
     let title = commit_message.unwrap_or("Default PR Title");
 
     let cmd_arg = format!(
-        r#"cd {} && gh pr create -a @me --body "{}" --dry-run -t "{}""#,
+        r#"cd {} && gh pr create -a @me --body "{}" -t "{}""#,
         directory, pr_body, title
     );
 
