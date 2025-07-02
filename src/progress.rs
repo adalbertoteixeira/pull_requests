@@ -1,8 +1,10 @@
 use chrono::{Datelike, Duration, Local, NaiveDate, Weekday};
 use clap::ArgMatches;
-use inquire::MultiSelect;
-use log::{debug, info};
+use log::info;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::convert::TryInto;
 use std::io::{self, Write};
 use std::process::Command;
 
@@ -38,7 +40,7 @@ pub struct Milestone {
 pub struct GithubProjectItem {
     pub assignees: Option<Vec<String>>,
     pub content: Option<ProjectContent>,
-    #[serde(rename = "end Date")]
+    #[serde(rename = "end date")]
     pub end_date: Option<String>,
     pub id: Option<String>,
     pub labels: Option<Vec<String>>,
@@ -48,6 +50,8 @@ pub struct GithubProjectItem {
     pub start_date: Option<String>,
     pub status: Option<String>,
     pub title: Option<String>,
+    #[serde(rename = "shipped date")]
+    pub shipped_date: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,6 +96,7 @@ pub struct GithubMilestone {
     pub state: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
+    #[serde(rename = "dueOn")]
     pub due_on: Option<String>,
     pub closed_at: Option<String>,
 }
@@ -118,7 +123,28 @@ fn format_issue_display(item: &GithubProjectItem) -> String {
         .and_then(|c| c.url.as_deref())
         .unwrap_or("No URL");
 
-    format!("- [{}] {} - (#{})[{}]\n", milestone, title, id, url)
+    let mut message = format!("- [{}] {} - (#{})[{}]\n", milestone, title, id, url);
+    if &item.content.as_ref().is_some_and(|c| c.body.is_some()) == &true {
+        let body = item.clone().content.unwrap().body.unwrap();
+        let re: Regex =
+            Regex::new(r"(?s)BUSINESS WRITE UP START.*?-->(.*?)<!--.*?BUSINESS WRITE UP END")
+                .unwrap();
+        if let Some(capture) = re.captures(&body) {
+            let business_write_up = &capture[1];
+            let lines: Vec<String> = business_write_up
+                .split("\n")
+                .map(|s| s.trim().to_string())
+                .collect();
+
+            for line in lines {
+                if line.len() > 0 {
+                    message.push_str(&format!("> {}\n", line));
+                }
+            }
+        }
+    }
+
+    message
 }
 
 fn sort_by_milestone(mut items: Vec<GithubProjectItem>) -> Vec<GithubProjectItem> {
@@ -141,7 +167,6 @@ fn sort_by_milestone(mut items: Vec<GithubProjectItem>) -> Vec<GithubProjectItem
 }
 
 pub fn last_thursday() -> NaiveDate {
-    info!("Computing last Thursday date");
     let today = Local::now().date_naive();
 
     // Find how many days to go back to reach Monday of current week
@@ -161,7 +186,6 @@ pub fn last_thursday() -> NaiveDate {
 }
 
 pub fn this_thursday() -> NaiveDate {
-    info!("Computing this Thursday date");
     let today = Local::now().date_naive();
 
     // Find how many days to go back to reach Monday of current week
@@ -184,6 +208,11 @@ pub fn next_thursday() -> NaiveDate {
     let thursday = this_thursday();
     thursday + Duration::days(7)
 }
+pub fn this_thursday_string() -> String {
+    let thursday = this_thursday();
+
+    thursday.format("%Y-%m-%d").to_string()
+}
 
 pub fn last_thursday_string() -> String {
     let last_thursday = last_thursday();
@@ -205,7 +234,7 @@ pub async fn progress(matches: ArgMatches<'static>) {
         .map(|s| s.trim().to_string())
         .collect();
 
-    let date_to_use = last_thursday_string();
+    let date_to_use = this_thursday_string();
 
     let mut milestone_issues: Vec<GithubProjectItem> = Vec::new();
     for project in &projects {
@@ -228,10 +257,9 @@ pub async fn progress(matches: ArgMatches<'static>) {
                     if let Some(temp_items) = response.items {
                         milestone_issues.extend(temp_items.clone());
                         info!(
-                            "Successfully fetched {} items from milestone {}: {:#?}",
+                            "Successfully fetched {} items from milestone {}",
                             temp_items.len(),
                             "11",
-                            temp_items
                         );
                     }
                 }
@@ -251,65 +279,105 @@ pub async fn progress(matches: ArgMatches<'static>) {
         }
     }
 
+    let mut blocked_issues: Vec<GithubProjectItem> = Vec::new();
+    let mut status_counts: HashMap<&str, i32> = HashMap::from([
+        ("closed", 0),
+        ("shipped", 0),
+        ("progress", 0),
+        ("blocked", 0),
+        ("support", 0),
+    ]);
     let mut closed_issues: Vec<GithubProjectItem> = Vec::new();
     let mut in_progress_issues: Vec<GithubProjectItem> = Vec::new();
-    let mut blocked_issues: Vec<GithubProjectItem> = Vec::new();
     let mut next_week_issues: Vec<GithubProjectItem> = Vec::new();
     for milestone_item in &milestone_issues {
-        if let Some(status) = &milestone_item.status {
-            if status == "In Progress" {
-                in_progress_issues.push(milestone_item.clone());
-            }
-            if status == "Done" {
-                if let Some(labels) = &milestone_item.labels {
-                    if labels.contains(&"shipped".to_string()) {
-                        closed_issues.push(milestone_item.clone());
-                    } else {
-                        in_progress_issues.push(milestone_item.clone());
-                    }
-                } else {
-                    in_progress_issues.push(milestone_item.clone());
-                }
-            }
-        }
         if let Some(labels) = &milestone_item.labels {
             if labels.contains(&"blocked".to_string()) {
                 blocked_issues.push(milestone_item.clone());
+                *status_counts.get_mut("blocked").unwrap() += 1;
+                continue;
             }
         }
-
+        let this_thursday_date = this_thursday();
         let last_thursday_date = last_thursday();
         let next_thursday_date = next_thursday();
 
-        let mut should_add_to_next_week = false;
+        if let Some(status) = &milestone_item.status {
+            if status == "In Progress" {
+                *status_counts.get_mut("progress").unwrap() += 1;
+                in_progress_issues.push(milestone_item.clone());
+            }
+            if status == "Done" {
+                if milestone_item.shipped_date.as_ref().is_some() {
+                    let shipped_date = chrono::NaiveDate::parse_from_str(
+                        milestone_item
+                            .shipped_date
+                            .as_ref()
+                            .expect("should be a string"),
+                        "%Y-%m-%d",
+                    )
+                    .expect("should have a string date");
 
-        if let Some(start_date_str) = &milestone_item.start_date {
-            if let Ok(start_date) = chrono::NaiveDate::parse_from_str(start_date_str, "%Y-%m-%d") {
-                if start_date >= last_thursday_date && start_date <= next_thursday_date {
-                    should_add_to_next_week = true;
+                    if shipped_date >= last_thursday_date && shipped_date <= this_thursday_date {
+                        closed_issues.push(milestone_item.clone());
+                        *status_counts.get_mut("shipped").unwrap() += 1;
+                        continue;
+                    }
+                }
+                if milestone_item.shipped_date.as_ref().is_none() {
+                    *status_counts.get_mut("closed").unwrap() += 1;
+                    continue;
+                }
+                if let Some(labels) = &milestone_item.labels {
+                    if labels.contains(&"support".to_string()) {
+                        *status_counts.get_mut("support").unwrap() += 1;
+                        continue;
+                    }
                 }
             }
         }
+
+        let mut should_add_to_next_week = false;
 
         if let Some(end_date_str) = &milestone_item.end_date {
             if let Ok(end_date) = chrono::NaiveDate::parse_from_str(end_date_str, "%Y-%m-%d") {
-                if end_date >= last_thursday_date && end_date <= next_thursday_date {
+                if end_date > this_thursday_date && end_date <= next_thursday_date {
                     should_add_to_next_week = true;
                 }
             }
         }
-
+        if let Some(start_date_str) = &milestone_item.start_date {
+            if let Ok(start_date) = chrono::NaiveDate::parse_from_str(start_date_str, "%Y-%m-%d") {
+                if start_date > this_thursday_date && start_date <= next_thursday_date {
+                    should_add_to_next_week = true;
+                }
+            }
+        }
         if should_add_to_next_week {
             next_week_issues.push(milestone_item.clone());
         }
     }
 
-    progress_output.push_str(&format!("\n## Week of {}\n### 🚢 Done\n", &date_to_use));
+    progress_output.push_str(&format!(
+        "\n## Week of {}\n### 🚢 Shipped Features\n",
+        &date_to_use
+    ));
     let sorted_closed_issues = sort_by_milestone(closed_issues);
     for item in &sorted_closed_issues {
         let formatted_issue = format_issue_display(item);
 
         progress_output.push_str(&formatted_issue);
+    }
+
+    let shipped_len: i8 = sorted_closed_issues.len().try_into().unwrap_or(0);
+    let closed_len: i8 = status_counts["closed"].try_into().unwrap_or(0);
+    if shipped_len < closed_len {
+        let diff = closed_len - shipped_len;
+        progress_output.push_str("> [!NOTE]\n");
+        progress_output.push_str(&format!(
+            "> Not displaying {} closed issues not considered user facing features\n",
+            diff,
+        ));
     }
 
     progress_output.push_str(&"\n### 🏗️ In Progress\n");
@@ -334,9 +402,23 @@ pub async fn progress(matches: ArgMatches<'static>) {
         progress_output.push_str(&formatted_issue);
     }
 
+    progress_output.push_str(&"\n### 📊 Metrics\n");
+    for (key, value) in &status_counts {
+        if *value == 0 {
+            continue;
+        }
+        let metric_entry_label = match *key {
+            "progress" => "issues being worked on",
+            "support" => "customer issues addressed",
+            "blocked" => "issues blocked",
+            "closed" => "issues closed",
+            "shipped" => "features shipped",
+            _ => key,
+        };
+
+        progress_output.push_str(&format!("- {} {}\n", value, metric_entry_label));
+    }
     progress_output.push_str("```\n");
     write!(handle, "{}", progress_output).unwrap_or_default();
     let _ = handle.flush();
-
-    // info!("Found {:?} total issues:", github_milestones);
 }
