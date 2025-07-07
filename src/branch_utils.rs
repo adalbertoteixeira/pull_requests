@@ -1,6 +1,7 @@
 use indicatif::ProgressBar;
 use inquire::Confirm;
 use log::{debug, error, info};
+use serde_json;
 use std::collections::HashMap;
 use std::time::Duration;
 use std::{
@@ -220,10 +221,7 @@ pub fn commit_pr(
     pr_template: Option<String>,
     no_verify: bool,
 ) -> Result<Option<i32>, io::Error> {
-    let mut cmd_arg = format!(
-        r#"cd {} && git commit -m  "{}""#,
-        &directory, &commit_message
-    );
+    let mut cmd_arg = format!(r#"git commit -m  "{}""#, &commit_message);
     if no_verify {
         cmd_arg.push_str(" --no-verify");
     }
@@ -247,6 +245,7 @@ pub fn commit_pr(
     let output = Command::new("sh")
         .arg("-c")
         .arg(cmd_arg)
+        .current_dir(directory)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output()
@@ -286,7 +285,7 @@ pub async fn push_pr(
     has_gh: bool,
 ) -> Option<i32> {
     info!("Starting pr push");
-    let mut cmd_arg = format!(r#"cd {} && git push"#, &directory);
+    let mut cmd_arg = r#"git push"#.to_owned();
     if no_verify {
         cmd_arg.push_str(" --no-verify");
     }
@@ -306,6 +305,9 @@ pub async fn push_pr(
     let output = Command::new("sh")
         .arg("-c")
         .arg(cmd_arg)
+        .current_dir(directory)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
         .output()
         .expect("Failed to run  process");
 
@@ -545,10 +547,11 @@ pub fn create_pr(
 }
 pub fn check_existing_pr(directory: &str) -> bool {
     info!("Checking for existing PR");
-    let cmd_arg = format!("cd {} && gh pr view", directory);
+    let cmd_arg = "gh pr view";
     let output = Command::new("sh")
         .arg("-c")
         .arg(cmd_arg)
+        .current_dir(directory)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .output();
@@ -576,4 +579,64 @@ pub fn check_existing_pr(directory: &str) -> bool {
         }
         Err(_) => false,
     }
+}
+
+pub fn update_pull_request(directory: &str, pr_template: &str) -> Result<(), io::Error> {
+    info!("Updating pull request");
+
+    let stdout = io::stdout();
+    let mut handle = io::BufWriter::new(&stdout);
+    // First, get the PR number for the current branch
+    let cmd_arg = "gh pr view --json number";
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(cmd_arg)
+        .current_dir(directory)
+        .output()?;
+
+    if !output.status.success() {
+        writeln!(handle, "No pull request found for current branch").unwrap_or_default();
+        let _ = handle.flush();
+        process::exit(1);
+    }
+
+    let pr_json = String::from_utf8_lossy(&output.stdout);
+    let pr_data: serde_json::Value = serde_json::from_str(&pr_json).unwrap_or_default();
+
+    if pr_data["number"].is_null() {
+        writeln!(handle, "Could not get PR number").unwrap_or_default();
+        let _ = handle.flush();
+        process::exit(1);
+    }
+
+    let pr_number = pr_data["number"].as_u64().unwrap();
+    let pr_template_escaped = pr_template.replace("'", "'\\''");
+
+    info!("{}", pr_template_escaped);
+    // Update the PR body
+    let update_cmd = format!(
+        r#"gh pr edit {} --body '{}'"#,
+        pr_number, pr_template_escaped
+    );
+
+    info!("Executing command: {}", update_cmd);
+    let update_output = Command::new("sh")
+        .arg("-c")
+        .arg(update_cmd)
+        .current_dir(directory)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .output()?;
+
+    if !update_output.status.success() {
+        let stderr = String::from_utf8_lossy(&update_output.stderr);
+        writeln!(handle, "Failed to update PR: {}", stderr).unwrap_or_default();
+        let _ = handle.flush();
+        process::exit(1);
+    }
+
+    writeln!(handle, "Pull request #{} updated successfully", pr_number).unwrap_or_default();
+    let _ = handle.flush();
+
+    Ok(())
 }

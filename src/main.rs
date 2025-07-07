@@ -80,6 +80,7 @@ async fn main() {
             github_api_token,
             mcp_config,
             has_gh,
+            &git_branch,
         )
         .await;
     }

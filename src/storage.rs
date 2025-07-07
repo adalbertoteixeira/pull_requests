@@ -214,14 +214,30 @@ pub async fn load_branch_config(
     ci_mode: bool,
     github_api_token: Option<&str>,
     has_gh: bool,
-) {
+) -> Result<Option<BranchYamlConfig>, io::Error> {
     let stdout = io::stdout(); // get the global stdout entity
     let mut handle = io::BufWriter::new(&stdout); // optional: wrap that handle in a buffer
     let path = Path::new(directory).join(".commit_message");
     let file_path = Path::new(&path).join(format!("{}.yaml", &git_branch));
-    let file = fs::File::open(&file_path).expect("Failed to open file");
-    let reader = io::BufReader::new(file);
-    let file_read: BranchYamlConfig = serde_yml::from_reader(reader).expect("Failed to parse YAML");
+    // let file = fs::File::open(&file_path).expect("Failed to open file");
+
+    let file: Option<File> = match fs::File::open(&file_path) {
+        Ok(x) => Some(x),
+        Err(_) => None,
+    };
+
+    if file.is_none() {
+        return Ok(None);
+    }
+    let reader = io::BufReader::new(file.unwrap());
+    let file_read: BranchYamlConfig = match serde_yml::from_reader(reader) {
+        Ok(x) => x,
+        Err(_) => {
+            return Ok(None);
+        }
+    };
+
+    // let file_read: BranchYamlConfig = serde_yml::from_reader(reader).expect("Failed to parse YAML");
     if file_read.last_commit_exit_code.is_some_and(|i| i != 0) {
         let previous_commit_message = file_read.commit_message.as_ref().unwrap().to_owned();
         let previous_commit_message_additional_messages =
@@ -258,6 +274,7 @@ pub async fn load_branch_config(
             process::exit(0);
         }
     }
+    Ok(Some(file_read))
 }
 
 pub fn save_branch_config(

@@ -36,10 +36,20 @@ pub async fn commit(
 
     let ci_mode = matches.is_present("ci_mode");
     let no_verify = matches.is_present("no_verify");
-    let stored_pr_template = match storage::get_branch_config(git_branch, directory) {
+    let stored_pr_template = match storage::load_branch_config(
+        git_branch,
+        directory,
+        no_verify,
+        ci_mode,
+        github_api_token,
+        has_gh,
+    )
+    .await
+    {
         Ok(x) => x,
         Err(_) => None,
     };
+
     let mut commit_message = None;
     let mut pr_template = None;
     match stored_pr_template {
@@ -62,16 +72,16 @@ pub async fn commit(
         "use_claude: {}, commit_message {:?}",
         use_claude, commit_message
     );
-    match (use_claude, commit_message.is_none()) {
-        (true, true) => {
+    match (use_claude) {
+        (true) => {
             writeln!(handle, "Will build a commit message using Claude").unwrap_or_default();
 
             let _ = handle.flush();
 
-            let git_diff = Command::new("git")
-                .arg("--no-pager")
-                .arg("diff")
-                .arg("--cached")
+            let git_diff_cmd = r#"printf "%q"  $(git --no-pager diff --cached)"#;
+            let git_diff = Command::new("sh")
+                .arg("-c")
+                .arg(git_diff_cmd)
                 .current_dir(directory)
                 .output()
                 .expect("Failed to run git diff");
@@ -84,9 +94,18 @@ pub async fn commit(
 The changes are the following: {}
 Please analyze this info and return a json object with the following structure: commit_message: string, commit_type: string, commit_labels: string[],
 The expected values are the following.
-- commit_message: should be a string under 50 characters that summarizes the main changes to the pr. Do not include the commit type in the commit_message entry
-- commit_type as a string choose the best from the following options and return the key: "feat: A new feature", "fix: Bug feature related or code linting, typecheck, etc fixes", "test: Adding missing tests or correcting existing tests", "refactor: A code change that improves performance or code quality", "docs: Documentation only changes", "build: Changes that affect the build system or external dependencies example scopes: gulp, broccoli, npm", "ci: Changes to our CI configuration files and scripts example scopes: Travis, Circle, BrowserStack, SauceLabs", "revert: Reverts a previous commit",
-- commit_labels: an array of strings; choose all that apply from the web, api or ci; if none match return an empty array - web: files related to frontend code - api: files related to backend code - ci: files related to deployments.
+**commit_message**
+should be a string under 50 characters that summarizes the main changes to the pr. Do not include the commit type in the commit_message entry
+**commit_type**
+as a string choose the best from the following options and return one of these keys:
+feat: A new feature,
+fix: Bug feature related or code linting, typecheck, etc fixes,
+test: Adding missing tests or correcting existing tests,
+refactor: A code change that improves performance or code quality,
+docs: Documentation only changes,
+build: Changes that affect the build system or external dependencies example scopes: gulp, broccoli, npm, ci: Changes to our CI configuration files and scripts example scopes: Travis, Circle, BrowserStack, SauceLabs, revert: Reverts a previous commit,
+**commit_labels**
+an array of strings; choose all that apply from the web, api or ci; if none match return an empty array - web: files related to frontend code - api: files related to backend code - ci: files related to deployments.
 Only output the result, do not commit the message" --output-format json"#,
                 &directory, &git_diff_stdout_string
             );
@@ -302,6 +321,27 @@ Only output the result, do not commit the message" --output-format json"#,
         }
     }
 
+    info!("Will ask for commit");
+    let commit_message_str = commit_message.clone().unwrap();
+    writeln!(handle, "Proposed commit is {}", commit_message_str).unwrap_or_default();
+    let _ = handle.flush();
+    let will_commit_pr = prompts::commit_pr_prompt(Some(commit_message_str));
+
+    info!("Commit was defined: {}", will_commit_pr);
+    if will_commit_pr == true {
+        ux_utils::commit_and_push(
+            directory,
+            commit_message_str,
+            additional_commit_message.clone(),
+            &git_branch,
+            pr_template.clone(),
+            no_verify,
+            ci_mode,
+            github_api_token,
+            has_gh,
+        )
+        .await;
+    }
     let mut confirm_message = "Do you want to build a PR template?".to_owned();
     if use_claude {
         confirm_message.push_str(" We will use Claude Code to build it");
@@ -334,23 +374,18 @@ Only output the result, do not commit the message" --output-format json"#,
             &directory,
             &git_branch,
         ));
-    }
-    info!("Will ask for commit");
-    let will_commit_pr = prompts::commit_pr_prompt();
 
-    info!("Commit was defined: {}", will_commit_pr);
-    if will_commit_pr == true {
-        ux_utils::commit_and_push(
+        let _ = storage::save_branch_config(
+            git_branch,
             directory,
-            commit_message.unwrap(),
-            additional_commit_message.clone(),
-            &git_branch,
             pr_template,
-            no_verify,
-            ci_mode,
-            github_api_token,
-            has_gh,
-        )
-        .await;
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
     }
 }

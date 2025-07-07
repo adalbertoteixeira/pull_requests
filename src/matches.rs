@@ -26,6 +26,12 @@ pub fn build_matches() -> ArgMatches<'static> {
                 .takes_value(true)
                 .help("A Github fine grained personal access token. See https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token \n You might require organization approval before being able to use it."),
         )
+                .arg(
+                    Arg::with_name("claude")
+                        .long("claude")
+                        .takes_value(false)
+                        .help("Pass this flag if you want to use Claude Code to help on the commit construction").global(true),
+                )
             .arg(Arg::with_name("mcp_config").long("mcp-config").help("string with the path to the mcp config, if available").takes_value(true).global(true))
                 .arg(
                     Arg::with_name("ci_mode")
@@ -42,6 +48,7 @@ pub fn build_matches() -> ArgMatches<'static> {
                 )
         .subcommands(vec![
             SubCommand::with_name("ticket")
+                .after_help("Will require setting the pager to cat: `gh config set pager cat`")
                 .arg(
                     Arg::with_name("clickup_api_key")
                         .help("Clickup API key to interact with issues")
@@ -55,6 +62,12 @@ pub fn build_matches() -> ArgMatches<'static> {
                         .required(true),
                 )
                 .subcommands(vec![
+
+                    SubCommand::with_name("create_pr_template").
+                                        long_about("create-pr-template"),
+                    SubCommand::with_name("update_pr").
+                                        long_about("Update PR in Github with th einfo stored locally"),
+                    SubCommand::with_name("create").long_about("Create a new ticket"),
                     SubCommand::with_name("spaces").long_about("Get base data for the available repositories in Github and / or workspaces in Github.
 This data is used to run searches against the services."),
                     SubCommand::with_name("issues").arg(
@@ -79,12 +92,6 @@ This data is used to run searches against the services."),
                         .takes_value(false),
                 ),
             SubCommand::with_name("commit")
-                .arg(
-                    Arg::with_name("claude")
-                        .long("claude")
-                        .takes_value(false)
-                        .help("Pass this flag if you want to use Claude Code to help on the commit construction"),
-                )
                 .arg(
                     Arg::with_name("type")
                         .short("t")
@@ -123,6 +130,7 @@ This data is used to run searches against the services."),
                         .value_name("show-pr-template")
                         .help("Show PR template")
                         .takes_value(false),
+
                 ),
             SubCommand::with_name("progress")
                 .after_help("Will require setting the pager to cat: `gh config set pager cat`")
@@ -133,6 +141,11 @@ This data is used to run searches against the services."),
                         .help("Comma-separated list of projects to check for progress")
                         .takes_value(true)
                         .default_value("1,2,3"),
+                )
+                .arg(
+                    Arg::with_name("slack_formatting")
+                        .long("slack-formatting")
+                        .help("Format progress output for slack")
                 )
         ])
         .get_matches()

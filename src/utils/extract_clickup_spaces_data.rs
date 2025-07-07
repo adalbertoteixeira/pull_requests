@@ -1,6 +1,6 @@
 use crate::storage::{
-    ClickupMember, ClickupPriority, ClickupSpace, ClickupStatus, ClickupYamlConfig, GithubSpace,
-    save_clickup_config,
+    save_clickup_config, ClickupMember, ClickupPriority, ClickupSpace, ClickupStatus,
+    ClickupYamlConfig, GithubSpace,
 };
 use clap::ArgMatches;
 use indicatif::ProgressBar;

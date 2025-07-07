@@ -8,8 +8,8 @@ use std::io::{self, Write};
 use std::process::Command;
 
 use crate::types::github_types::{
-    GithubIssue, GithubMilestone, GithubProjectItem, GithubProjectResponse,
-    GithubProjectStatus, Milestone, ProjectContent, ProjectMilestone,
+    GithubIssue, GithubMilestone, GithubProjectItem, GithubProjectResponse, GithubProjectStatus,
+    Milestone, ProjectContent, ProjectMilestone,
 };
 
 fn format_issue_display(item: &GithubProjectItem) -> String {
@@ -27,7 +27,7 @@ fn format_issue_display(item: &GithubProjectItem) -> String {
         .and_then(|c| c.url.as_deref())
         .unwrap_or("No URL");
 
-    let mut message = format!("- [{}] {} - (#{})[{}]\n", milestone, title, id, url);
+    let mut message = format!("- [{}] {} - [#{}]({})\n", milestone, title, id, url);
     if &item.content.as_ref().is_some_and(|c| c.body.is_some()) == &true {
         let body = item.clone().content.unwrap().body.unwrap();
         let re: Regex =

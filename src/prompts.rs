@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use crate::branch_utils;
+use crate::{branch_utils, commit};
 use inquire::{Confirm, Editor, Select, Text, formatter::OptionFormatter, validator::Validation};
 use log::info;
 
@@ -219,8 +219,14 @@ pub fn select_message_prompt(git_branch: &str) -> String {
     return message;
 }
 
-pub fn commit_pr_prompt() -> bool {
-    let commit_pr_prompt_answer = Confirm::new("Commit this PR?").with_default(true).prompt();
+pub fn commit_pr_prompt(commit_message: Option<&str>) -> bool {
+    let commit_message_for_prompt = match commit_message.is_some() {
+        true => format!("\x1b[1;31m{}\x1b[0;0m", commit_message.unwrap()),
+        false => "this PR".to_string(),
+    };
+    let commit_pr_prompt_answer = Confirm::new(&format!("Commit {}?", commit_message_for_prompt))
+        .with_default(true)
+        .prompt();
 
     let answer = match commit_pr_prompt_answer {
         Ok(response) => response,
@@ -276,35 +282,49 @@ pub fn pr_template_prompt(
             .unwrap_or_default();
             let _ = handle.flush();
 
-            let git_diff = Command::new("git")
-                .arg("diff")
-                .arg(format!("main..{}", git_branch))
+            // let git_diff = Command::new("git")
+            //     .arg("diff")
+            //     .arg(format!("main..{}", git_branch))
+            //     .current_dir(directory)
+            //     .output()
+            //     .expect("Failed to run git diff");
+            //
+            // info!("Git diff: {:?}", git_diff);
+
+            let git_diff_cmd = format!(
+                r#"printf "%q"  $(git --no-pager diff main..{} )"#,
+                &git_branch
+            );
+            let git_diff = Command::new("sh")
+                .arg("-c")
+                .arg(git_diff_cmd)
                 .current_dir(directory)
                 .output()
                 .expect("Failed to run git diff");
 
-            info!("Git diff: {:?}", git_diff);
+            let git_diff_stdout_string = str::from_utf8(&git_diff.stdout).unwrap();
+            info!("Git diff: {:?}", git_diff_stdout_string);
 
             let bar = ProgressBar::new_spinner();
             bar.enable_steady_tick(Duration::from_millis(100));
             let cmd_arg = format!(
-                r#"cd {} && claude --model sonnet -p "We have done several changes to this repository, as seen in these changes we got by running git diff:
-                {:?}
-                Please compare the repository against the main branch and write and return the a json object with the following structure:
-
-                    pr_description: string,
-                    pr_risk_factor: string,
-                    pr_risk_factor_description: string,
-                    pr_test_steps: string,
-                    pr_scopes: [],
-
+                r#"cd {} && claude --model sonnet -p "We have done several changes to this repository.You are a technical writer in charge of documenting the changes and writing the changes to a document.
+The changes are the following:
+                {}
+                Based on these changes, give me the following:
                 pr_description should be a short summary of the changes. Write a paragraph with the main changes and if needed a bullet list with the main changes.
                 pr_risk_factor: should be one of High  Medium  Low  Trivial; choose an option based on how complex the changes were, the potential to break CI/CD deployments, and changes to user experiences.
                 pr_risk_factor_description: based on the selected risk factor describe why the option was selected,
                 pr_test_steps: describe how to manually test this PR and what we should be aware of; ideally mention commands to run, curl requests, etc,
                 pr_scopes: an array of options from web  api  ci; select all applicable based on the cahnges: were they done to the backend code, the frontend code or the deployment process.
+                Return the response as a json object with the following structure:
+                    pr_description: string,
+                    pr_risk_factor: string,
+                    pr_risk_factor_description: string,
+                    pr_test_steps: string,
+                    pr_scopes: [],
                 " --output-format json "#,
-                &directory, &git_diff
+                &directory, &git_diff_stdout_string
             );
 
             let output = Command::new("sh")
@@ -314,6 +334,7 @@ pub fn pr_template_prompt(
                 .expect("Failed to run  process");
 
             bar.finish();
+            info!("Claude PR  {:?}", output);
             if !&output.status.success() {
                 writeln!(handle, "{}\n{}\n{}", "\x1b[1;31mGetting results from Claude failed\x1b[0;0m", str::from_utf8(&output.stderr).unwrap(), "\n- Is `@anthropic-ai/claude-code` installed in the repository you are working with?\n- Is the key correctly set?").unwrap_or_default();
                 let _ = handle.flush();

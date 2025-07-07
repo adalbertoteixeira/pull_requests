@@ -6,14 +6,15 @@ use std::{
 };
 
 use clap::ArgMatches;
-use inquire::{Select, Text};
+use inquire::{Confirm, Select, Text};
 use log::{debug, info};
 use reqwest::Client;
 use serde_json;
 
 use crate::{
+    branch_utils, prompts,
     storage::{
-        BranchYamlConfig, get_branch_config, load_clickup_config, load_github_config,
+        self, BranchYamlConfig, get_branch_config, load_clickup_config, load_github_config,
         save_branch_config,
     },
     types::github_types::GithubIssue,
@@ -255,6 +256,7 @@ pub async fn ticket(
     github_api_token: Option<&str>,
     mcp_config: Option<&str>,
     _has_gh: bool,
+    git_branch: &str,
 ) {
     info!("Ticket command");
     let stdout = io::stdout(); // get the global stdout entity
@@ -262,11 +264,140 @@ pub async fn ticket(
     debug!("matches {:?}", matches);
 
     let clickup_api_key = matches.value_of("clickup_api_key");
-    let tool = define_issue_management_tool(github_api_token, clickup_api_key);
+    let tool = IssueManagementTool::GitHub;
 
     let client = reqwest::Client::new();
     let clickup_api_key = matches.value_of("clickup_api_key").unwrap();
     match matches.subcommand() {
+        ("update_pr", Some(_arg)) => {
+            let stored_config = storage::get_branch_config(git_branch, directory)
+                .expect("Should hv a stored branch");
+            if stored_config
+                .as_ref()
+                .is_none_or(|c| c.pr_template.is_none())
+            {
+                writeln!(handle, "No pr template built.").unwrap_or_default();
+                let _ = handle.flush();
+                process::exit(1);
+            }
+            let pr_template = stored_config.unwrap().pr_template.unwrap();
+            let _ = branch_utils::update_pull_request(directory, &pr_template);
+        }
+        ("create_pr_template", Some(_arg)) => {
+            let issue_id = branch_utils::issue_id(&git_branch);
+
+            let use_claude = matches.is_present("claude");
+            let pr_template = Some(prompts::pr_template_prompt(
+                &issue_id,
+                use_claude,
+                &directory,
+                &git_branch,
+            ));
+
+            let _ = storage::save_branch_config(
+                git_branch,
+                directory,
+                pr_template.clone(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            );
+
+            // Ask if user wants to update the PR in GitHub
+            let update_pr_prompt = Confirm::new("Update ticket in Github?")
+                .with_default(true)
+                .prompt();
+
+            match update_pr_prompt {
+                Ok(true) => {
+                    if let Some(template) = pr_template {
+                        let _ = branch_utils::update_pull_request(directory, &template);
+                    } else {
+                        writeln!(handle, "No PR template found to update with").unwrap_or_default();
+                        let _ = handle.flush();
+                    }
+                }
+                Ok(false) => {
+                    process::exit(0);
+                }
+                Err(_) => {
+                    writeln!(handle, "Input cancelled").unwrap_or_default();
+                    let _ = handle.flush();
+                    process::exit(1);
+                }
+            }
+        }
+        ("create", Some(arg)) => {
+            // Extract OWNER/REPO from directory/.github/config
+            let github_config_path = Path::new(directory).join(".git").join("config");
+            debug!("github_config_path {:?}", github_config_path);
+            let mut owner_repo: Option<String> = None;
+            if github_config_path.exists() {
+                match fs::read_to_string(&github_config_path) {
+                    Ok(config_content) => {
+                        debug!("github_config_path {:?}", config_content);
+                        // Parse the config to extract owner/repo
+                        // This is a simplified parser - you might need to adjust based on actual config format
+                        owner_repo = config_content
+                            .lines()
+                            .find(|line| line.contains("url") || line.contains("remote"))
+                            .and_then(|line| {
+                                debug!("line {:?}", line);
+                                if line.contains("github.com") {
+                                    let parts: Vec<&str> = line.split('/').collect();
+                                    if parts.len() >= 2 {
+                                        let owner = parts[parts.len() - 2];
+                                        let repo = parts[parts.len() - 1].replace(".git", "");
+                                        Some(format!("{}/{}", owner, repo))
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            })
+                    }
+                    Err(_) => {}
+                }
+            };
+
+            debug!("ONWER/REPO from config file {:?}", owner_repo);
+            if owner_repo.is_none() {
+                owner_repo = match Text::new("Enter the owner/repo (e.g., wearebenlabs/repo-name):")
+                    .prompt()
+                {
+                    Ok(owner_repo) => Some(owner_repo),
+                    Err(_) => {
+                        writeln!(handle, "Input cancelled").unwrap_or_default();
+                        let _ = handle.flush();
+                        process::exit(1);
+                    }
+                }
+            }
+
+            debug!("ONWER/REPO from prompt {:?}", owner_repo);
+            // Get milestones using the owner/repo
+            let milestones_output = std::process::Command::new("gh")
+                .arg("api")
+                .arg(format!("repos/{}/milestones", owner_repo.as_ref().unwrap()))
+                .current_dir(directory)
+                .output();
+
+            debug!("milestones_output {:?}", milestones_output);
+            let pr_title = match Text::new("What is the PR title?").prompt() {
+                Ok(title) => title,
+                Err(_) => {
+                    writeln!(handle, "Input cancelled").unwrap_or_default();
+                    let _ = handle.flush();
+                    process::exit(1);
+                }
+            };
+            debug!("pr title {:?}", pr_title);
+        }
         ("issues", Some(arg)) => {
             match tool {
                 IssueManagementTool::GitHub => {

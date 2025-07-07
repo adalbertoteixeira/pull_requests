@@ -1,4 +1,4 @@
-use crate::storage::{GithubSpace, save_github_config};
+use crate::storage::{save_github_config, GithubSpace};
 use indicatif::ProgressBar;
 use log::{debug, info};
 use reqwest::Client;
